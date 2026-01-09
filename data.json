@@ -1,0 +1,61 @@
+{
+  "products": {
+    "topps-chrome-basketball-2025": {
+      "name": "2025-26 Topps Chrome Basketball",
+      "sport": "NBA",
+      "brand": "Topps Chrome",
+      "year": "2025-26",
+      "configs": {
+        "hobby": { "name": "Hobby" },
+        "jumbo": { "name": "Jumbo" },
+        "breaker": { "name": "Breaker" },
+        "value": { "name": "Value" },
+        "hanger": { "name": "Hanger" },
+        "mega": { "name": "Mega" }
+      }
+    }
+  },
+  "odds": {
+    "topps-chrome-basketball-2025": {
+      "hobby": [
+        { "card_type": "Base", "parallel": "Base", "odds": 3 },
+        { "card_type": "Base", "parallel": "Refractor", "odds": 3 },
+        { "card_type": "Base", "parallel": "Prism", "odds": 5 },
+        { "card_type": "Base", "parallel": "Gold /50", "odds": 435 },
+        { "card_type": "Base", "parallel": "Superfractor 1/1", "odds": 21767 },
+        { "card_type": "Youthquake", "parallel": "Base", "odds": 29 },
+        { "card_type": "Topps Chrome Autographs Rookies", "parallel": "Base", "odds": 65 }
+      ],
+      "jumbo": [
+        { "card_type": "Base", "parallel": "Base", "odds": 1 },
+        { "card_type": "Base", "parallel": "Refractor", "odds": 1 },
+        { "card_type": "Base", "parallel": "Gold /50", "odds": 130 },
+        { "card_type": "Base", "parallel": "Superfractor 1/1", "odds": 6495 },
+        { "card_type": "Topps Chrome Autographs Rookies", "parallel": "Base", "odds": 12 }
+      ],
+      "breaker": [
+        { "card_type": "Base", "parallel": "Refractor", "odds": 1 },
+        { "card_type": "Base", "parallel": "Gold /50", "odds": 22 },
+        { "card_type": "Base", "parallel": "Superfractor 1/1", "odds": 1083 },
+        { "card_type": "Topps Chrome Autographs Rookies", "parallel": "Base", "odds": 2 }
+      ],
+      "value": [
+        { "card_type": "Base", "parallel": "Base", "odds": 3 },
+        { "card_type": "Base", "parallel": "Refractor", "odds": 7 },
+        { "card_type": "Base", "parallel": "Gold /50", "odds": 4309 },
+        { "card_type": "Topps Chrome Autographs Rookies", "parallel": "Base", "odds": 3543 }
+      ],
+      "hanger": [
+        { "card_type": "Base", "parallel": "Refractor", "odds": 2 },
+        { "card_type": "Base", "parallel": "Gold /50", "odds": 496 },
+        { "card_type": "Topps Chrome Autographs Rookies", "parallel": "Base", "odds": 316 }
+      ],
+      "mega": [
+        { "card_type": "Base", "parallel": "Base", "odds": 3 },
+        { "card_type": "Base", "parallel": "Refractor", "odds": 4 },
+        { "card_type": "Base", "parallel": "Gold /50", "odds": 2107 },
+        { "card_type": "Topps Chrome Autographs Rookies", "parallel": "Base", "odds": 1547 }
+      ]
+    }
+  }
+}

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+    <div class="w-full min-h-screen px-4 py-6 sm:px-6 md:px-8 lg:px-12">
+        
+        <!-- Header -->
+        <header class="mb-8">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">Card Tool</h1>
+                    <p class="text-zinc-500 text-sm mt-1">Trading Card Odds Visualizer</p>
+                </div>
+                
+                <!-- 3 Dropdowns -->
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <select id="sportSelect" class="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-zinc-500">
+                        <option value="" disabled selected>Sport...</option>
+                    </select>
+                    <select id="yearSelect" disabled class="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-zinc-500 disabled:opacity-50">
+                        <option value="" disabled selected>Year...</option>
+                    </select>
+                    <select id="productSelect" disabled class="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-zinc-500 disabled:opacity-50">
+                        <option value="" disabled selected>Product...</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <div id="emptyState" class="flex flex-col items-center justify-center py-20">
+                <div class="text-6xl mb-6">🎴</div>
+                <h2 class="text-xl font-semibold text-zinc-300 mb-2">Select a Product</h2>
+                <p class="text-zinc-500 text-sm text-center max-w-md">Choose a trading card product to explore pack odds.</p>
+            </div>
+
+            <div id="productContent" class="hidden">
+                <p class="text-zinc-400">Product content will go here</p>
+            </div>
+        </main>
+
+    </div>
+
+    <script>
+        // ============ CONFIG ============
+        // Replace with your GitHub raw URL after uploading data.json
+        const DATA_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/data.json';
+
+        // ============ DATA ============
+        let PRODUCTS = {};
+        let ODDS = {};
+
+        // Fallback data if fetch fails
+        const FALLBACK_DATA = {
+            products: {
+                "topps-chrome-basketball-2025": {
+                    name: "2025-26 Topps Chrome Basketball",
+                    sport: "NBA",
+                    brand: "Topps Chrome",
+                    year: "2025-26"
+                }
+            },
+            odds: {}
+        };
+
+        // ============ HELPERS ============
+        function getAvailableSports() {
+            const sports = new Set();
+            Object.values(PRODUCTS).forEach(p => sports.add(p.sport));
+            return Array.from(sports).sort();
+        }
+
+        function getYearsBySport(sport) {
+            const years = new Set();
+            Object.values(PRODUCTS).filter(p => p.sport === sport).forEach(p => years.add(p.year));
+            return Array.from(years).sort((a, b) => b.localeCompare(a));
+        }
+
+        function getProducts(sport, year) {
+            return Object.entries(PRODUCTS)
+                .filter(([id, p]) => p.sport === sport && p.year === year)
+                .map(([id, p]) => ({ id, ...p }));
+        }
+
+        // ============ STATE ============
+        let state = { sport: null, year: null, product: null };
+
+        // ============ URL / DEEP LINKING ============
+        function updateURL() {
+            const params = new URLSearchParams();
+            if (state.sport) params.set('sport', state.sport);
+            if (state.year) params.set('year', state.year);
+            if (state.product) params.set('product', state.product);
+            
+            const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
+            window.history.replaceState({}, '', newURL);
+        }
+
+        function loadFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            const sport = params.get('sport');
+            const year = params.get('year');
+            const product = params.get('product');
+
+            if (sport && getAvailableSports().includes(sport)) {
+                document.getElementById('sportSelect').value = sport;
+                onSportChange(sport, false);
+
+                if (year && getYearsBySport(sport).includes(year)) {
+                    document.getElementById('yearSelect').value = year;
+                    onYearChange(year, false);
+
+                    if (product && PRODUCTS[product]) {
+                        document.getElementById('productSelect').value = product;
+                        onProductChange(product, false);
+                    }
+                }
+            }
+        }
+
+        // ============ HANDLERS ============
+        function onSportChange(sport, updateUrl = true) {
+            state.sport = sport;
+            state.year = null;
+            state.product = null;
+
+            const yearSelect = document.getElementById('yearSelect');
+            const years = getYearsBySport(sport);
+            yearSelect.innerHTML = '<option value="" disabled selected>Year...</option>';
+            years.forEach(y => yearSelect.innerHTML += `<option value="${y}">${y}</option>`);
+            yearSelect.disabled = false;
+
+            document.getElementById('productSelect').innerHTML = '<option value="" disabled selected>Product...</option>';
+            document.getElementById('productSelect').disabled = true;
+            
+            document.getElementById('emptyState').classList.remove('hidden');
+            document.getElementById('productContent').classList.add('hidden');
+
+            if (updateUrl) updateURL();
+        }
+
+        function onYearChange(year, updateUrl = true) {
+            state.year = year;
+            state.product = null;
+
+            const productSelect = document.getElementById('productSelect');
+            const products = getProducts(state.sport, year);
+            productSelect.innerHTML = '<option value="" disabled selected>Product...</option>';
+            products.forEach(p => productSelect.innerHTML += `<option value="${p.id}">${p.brand}</option>`);
+            productSelect.disabled = false;
+
+            if (updateUrl) updateURL();
+        }
+
+        function onProductChange(productId, updateUrl = true) {
+            state.product = productId;
+            const product = PRODUCTS[productId];
+            
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('productContent').classList.remove('hidden');
+            document.getElementById('productContent').innerHTML = `
+                <div class="bg-zinc-900 rounded-lg p-6">
+                    <h2 class="text-xl font-semibold">${product.name}</h2>
+                    <p class="text-zinc-500 text-sm mt-1">${product.sport} • ${product.brand} • ${product.year}</p>
+                </div>
+            `;
+
+            if (updateUrl) updateURL();
+        }
+
+        // ============ DATA LOADING ============
+        async function loadData() {
+            try {
+                const response = await fetch(DATA_URL);
+                if (!response.ok) throw new Error('Fetch failed');
+                const data = await response.json();
+                PRODUCTS = data.products || {};
+                ODDS = data.odds || {};
+                console.log('✓ Data loaded from GitHub');
+            } catch (error) {
+                console.warn('⚠ GitHub fetch failed, using fallback data:', error.message);
+                PRODUCTS = FALLBACK_DATA.products;
+                ODDS = FALLBACK_DATA.odds;
+            }
+        }
+
+        // ============ INIT ============
+        async function init() {
+            await loadData();
+
+            const sportSelect = document.getElementById('sportSelect');
+            getAvailableSports().forEach(sport => {
+                sportSelect.innerHTML += `<option value="${sport}">${sport}</option>`;
+            });
+
+            sportSelect.addEventListener('change', e => onSportChange(e.target.value));
+            document.getElementById('yearSelect').addEventListener('change', e => onYearChange(e.target.value));
+            document.getElementById('productSelect').addEventListener('change', e => onProductChange(e.target.value));
+
+            loadFromURL();
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
