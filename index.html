@@ -5,9 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Card Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gem-gradient {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+        }
+    </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
-    <div class="w-full min-h-screen px-4 py-6 sm:px-6 md:px-8 lg:px-12">
+    <div class="w-full min-h-screen px-4 py-6 sm:px-6 md:px-8 lg:px-12 max-w-6xl mx-auto">
         
         <!-- Header -->
         <header class="mb-8">
@@ -40,33 +45,26 @@
                 <p class="text-zinc-500 text-sm text-center max-w-md">Choose a trading card product to explore pack odds.</p>
             </div>
 
-            <div id="productContent" class="hidden">
-                <p class="text-zinc-400">Product content will go here</p>
-            </div>
+            <div id="productContent" class="hidden"></div>
         </main>
 
     </div>
 
     <script>
         // ============ CONFIG ============
-        // Replace with your GitHub raw URL after uploading data.json
         const DATA_URL = 'https://raw.githubusercontent.com/luis-ferreras/CardOdds/main/data.json';
 
         // ============ DATA ============
         let PRODUCTS = {};
         let ODDS = {};
+        let HIDDEN_GEMS = {};
 
-        // Fallback data if fetch fails
-        const FALLBACK_DATA = {
-            products: {
-                "topps-chrome-basketball-2025": {
-                    name: "2025-26 Topps Chrome® Basketball",
-                    sport: "NBA",
-                    brand: "Topps Chrome Basketball",
-                    year: "2025-26"
-                }
-            },
-            odds: {}
+        // ============ STATE ============
+        let state = { 
+            sport: null, 
+            year: null, 
+            product: null,
+            config: 'hobby'
         };
 
         // ============ HELPERS ============
@@ -88,8 +86,40 @@
                 .map(([id, p]) => ({ id, ...p }));
         }
 
-        // ============ STATE ============
-        let state = { sport: null, year: null, product: null };
+        function parseOdds(oddsStr) {
+            if (!oddsStr) return null;
+            const parts = oddsStr.split(':');
+            if (parts.length !== 2) return null;
+            const [num, denom] = parts.map(Number);
+            if (num > 1) return 1 / num; // e.g., "3:1" = every 0.33 packs
+            return denom; // e.g., "1:65" = 65
+        }
+
+        function formatOdds(oddsStr) {
+            return oddsStr || '—';
+        }
+
+        function getRarityColor(oddsStr) {
+            const odds = parseOdds(oddsStr);
+            if (!odds || odds < 1) return 'text-emerald-400'; // Very common
+            if (odds <= 20) return 'text-emerald-400';
+            if (odds <= 100) return 'text-blue-400';
+            if (odds <= 500) return 'text-violet-400';
+            if (odds <= 2000) return 'text-amber-400';
+            if (odds <= 10000) return 'text-orange-400';
+            return 'text-red-400';
+        }
+
+        function getRarityBg(oddsStr) {
+            const odds = parseOdds(oddsStr);
+            if (!odds || odds < 1) return 'bg-emerald-400/10 border-emerald-400/30';
+            if (odds <= 20) return 'bg-emerald-400/10 border-emerald-400/30';
+            if (odds <= 100) return 'bg-blue-400/10 border-blue-400/30';
+            if (odds <= 500) return 'bg-violet-400/10 border-violet-400/30';
+            if (odds <= 2000) return 'bg-amber-400/10 border-amber-400/30';
+            if (odds <= 10000) return 'bg-orange-400/10 border-orange-400/30';
+            return 'bg-red-400/10 border-red-400/30';
+        }
 
         // ============ URL / DEEP LINKING ============
         function updateURL() {
@@ -97,6 +127,7 @@
             if (state.sport) params.set('sport', state.sport);
             if (state.year) params.set('year', state.year);
             if (state.product) params.set('product', state.product);
+            if (state.config) params.set('config', state.config);
             
             const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
             window.history.replaceState({}, '', newURL);
@@ -107,6 +138,9 @@
             const sport = params.get('sport');
             const year = params.get('year');
             const product = params.get('product');
+            const config = params.get('config');
+
+            if (config) state.config = config;
 
             if (sport && getAvailableSports().includes(sport)) {
                 document.getElementById('sportSelect').value = sport;
@@ -160,18 +194,162 @@
 
         function onProductChange(productId, updateUrl = true) {
             state.product = productId;
-            const product = PRODUCTS[productId];
-            
             document.getElementById('emptyState').classList.add('hidden');
             document.getElementById('productContent').classList.remove('hidden');
+            renderProductContent();
+            if (updateUrl) updateURL();
+        }
+
+        function setConfig(config) {
+            state.config = config;
+            renderProductContent();
+            updateURL();
+        }
+
+        // ============ RENDER ============
+        function renderProductContent() {
+            const product = PRODUCTS[state.product];
+            const productOdds = ODDS[state.product];
+            const hiddenGem = HIDDEN_GEMS[state.product];
+            
+            if (!product || !productOdds) {
+                document.getElementById('productContent').innerHTML = '<p class="text-zinc-500">No data available</p>';
+                return;
+            }
+
+            const configs = product.configs || {};
+            const currentConfig = productOdds[state.config] || {};
+            const currentGem = hiddenGem ? hiddenGem[state.config] : null;
+            const configInfo = configs[state.config] || {};
+            const totalCards = (configInfo.packs || 0) * (configInfo.cardsPerPack || 0);
+
             document.getElementById('productContent').innerHTML = `
-                <div class="bg-zinc-900 rounded-lg p-6">
-                    <h2 class="text-xl font-semibold">${product.name}</h2>
+                <!-- Product Header -->
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold text-white">${product.name}</h2>
                     <p class="text-zinc-500 text-sm mt-1">${product.sport} • ${product.brand} • ${product.year}</p>
                 </div>
-            `;
 
-            if (updateUrl) updateURL();
+                <!-- Config Tabs -->
+                <div class="flex flex-wrap gap-2 mb-6">
+                    ${Object.entries(configs).map(([key, cfg]) => `
+                        <button onclick="setConfig('${key}')" 
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-all
+                            ${state.config === key 
+                                ? 'bg-white text-zinc-900' 
+                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}">
+                            ${cfg.name.replace(' Box', '')}
+                        </button>
+                    `).join('')}
+                </div>
+
+                <!-- Box Info -->
+                <div class="bg-zinc-900 rounded-lg p-4 mb-6 flex flex-wrap gap-6">
+                    <div>
+                        <div class="text-zinc-500 text-xs uppercase tracking-wide">Packs</div>
+                        <div class="text-xl font-bold text-white">${configInfo.packs || '—'}</div>
+                    </div>
+                    <div>
+                        <div class="text-zinc-500 text-xs uppercase tracking-wide">Cards/Pack</div>
+                        <div class="text-xl font-bold text-white">${configInfo.cardsPerPack || '—'}</div>
+                    </div>
+                    <div>
+                        <div class="text-zinc-500 text-xs uppercase tracking-wide">Total Cards</div>
+                        <div class="text-xl font-bold text-white">${totalCards || '—'}</div>
+                    </div>
+                </div>
+
+                <!-- Hidden Gem -->
+                ${currentGem ? `
+                <div class="gem-gradient rounded-lg p-4 mb-6">
+                    <div class="flex items-start gap-3">
+                        <div class="text-2xl">💎</div>
+                        <div>
+                            <div class="text-xs uppercase tracking-wide text-amber-900 font-semibold mb-1">Hidden Gem</div>
+                            <div class="text-lg font-bold text-zinc-900">${currentGem.card}</div>
+                            <div class="text-amber-900 font-semibold">${currentGem.odds}</div>
+                            <p class="text-amber-900/80 text-sm mt-2">${currentGem.reason}</p>
+                            <p class="text-amber-900/60 text-xs mt-1">${currentGem.comparison}</p>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Base Parallels -->
+                ${currentConfig.base_parallels ? `
+                <div class="mb-8">
+                    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Base Parallels</h3>
+                    <div class="grid gap-2">
+                        ${currentConfig.base_parallels.map(p => `
+                            <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-zinc-200">${p.name}</span>
+                                    ${p.numbered ? `<span class="text-xs text-zinc-500">${p.numbered}</span>` : ''}
+                                </div>
+                                <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Inserts -->
+                ${currentConfig.inserts ? `
+                <div class="mb-8">
+                    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Inserts</h3>
+                    <div class="grid gap-2">
+                        ${currentConfig.inserts.map(p => `
+                            <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-zinc-200">${p.name}</span>
+                                    ${p.type === 'ssp' ? `<span class="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded">SSP</span>` : ''}
+                                    ${p.checklist ? `<span class="text-xs text-zinc-500">${p.checklist} cards</span>` : ''}
+                                </div>
+                                <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Autographs -->
+                ${currentConfig.autographs ? `
+                <div class="mb-8">
+                    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Autographs</h3>
+                    <div class="grid gap-2">
+                        ${currentConfig.autographs.map(p => `
+                            <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-zinc-200">${p.name}</span>
+                                    ${p.checklist ? `<span class="text-xs text-zinc-500">${p.checklist} signers</span>` : ''}
+                                </div>
+                                <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Auto Parallels -->
+                ${currentConfig.auto_parallels ? `
+                <div class="mb-8">
+                    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Rookie Auto Parallels</h3>
+                    <div class="grid gap-2">
+                        ${currentConfig.auto_parallels.map(p => `
+                            <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
+                                <span class="text-zinc-200">${p.name}</span>
+                                <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Footer -->
+                <div class="text-center text-zinc-600 text-xs mt-12 pb-8">
+                    Data from official Topps packaging. For educational purposes only.
+                </div>
+            `;
         }
 
         // ============ DATA LOADING ============
@@ -182,11 +360,13 @@
                 const data = await response.json();
                 PRODUCTS = data.products || {};
                 ODDS = data.odds || {};
+                HIDDEN_GEMS = data.hidden_gems || {};
                 console.log('✓ Data loaded from GitHub');
             } catch (error) {
-                console.warn('⚠ GitHub fetch failed, using fallback data:', error.message);
-                PRODUCTS = FALLBACK_DATA.products;
-                ODDS = FALLBACK_DATA.odds;
+                console.warn('⚠ GitHub fetch failed:', error.message);
+                PRODUCTS = {};
+                ODDS = {};
+                HIDDEN_GEMS = {};
             }
         }
 
