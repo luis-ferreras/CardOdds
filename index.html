@@ -6,7 +6,7 @@
     <title>Card Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .gem-gradient {
+        .sleeper-gradient {
             background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
         }
         .loading-pulse {
@@ -15,6 +15,9 @@
         @keyframes pulse {
             0%, 100% { opacity: 0.4; }
             50% { opacity: 1; }
+        }
+        .ladder-bar {
+            transition: width 0.3s ease;
         }
     </style>
 </head>
@@ -76,7 +79,6 @@
         // ============ GOOGLE SHEETS CONFIG ============
         const SHEET_ID = '1m_snihKKWJEGRfwaNdoIiR4-eMrO0YYmm7mnD_8HteQ';
         
-        // GID for each tab
         const SHEET_GIDS = {
             products: 0,
             odds: 2126001521,
@@ -88,7 +90,6 @@
             if (gid !== null) {
                 return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
             }
-            // Fallback to sheet name method
             return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
         }
 
@@ -96,11 +97,7 @@
         function parseCSV(csvText) {
             const lines = csvText.split('\n');
             if (lines.length === 0) return [];
-            
-            // Parse header
             const headers = parseCSVLine(lines[0]);
-            
-            // Parse rows
             const data = [];
             for (let i = 1; i < lines.length; i++) {
                 if (lines[i].trim() === '') continue;
@@ -118,7 +115,6 @@
             const result = [];
             let current = '';
             let inQuotes = false;
-            
             for (let i = 0; i < line.length; i++) {
                 const char = line[i];
                 if (char === '"') {
@@ -144,7 +140,8 @@
             sport: null, 
             year: null, 
             product: null,
-            config: 'hobby'
+            config: 'hobby',
+            view: 'odds' // odds, compare, ladder, calculator, insights
         };
 
         // ============ DATA PROCESSING ============
@@ -176,7 +173,6 @@
                 row.product_id === productId && row.config === config
             );
 
-            // Group by category
             const baseParallels = filtered
                 .filter(row => row.category === 'base')
                 .map(row => ({
@@ -209,14 +205,26 @@
             };
         }
 
+        function getAllParallelsForProduct(productId) {
+            // Get unique parallels across all configs
+            const parallels = new Map();
+            ODDS_RAW.filter(row => row.product_id === productId && row.category === 'base')
+                .forEach(row => {
+                    const name = row.parallel || row.card_type;
+                    if (!parallels.has(name)) {
+                        parallels.set(name, {});
+                    }
+                    parallels.get(name)[row.config] = row.odds ? formatOddsValue(row.odds) : null;
+                });
+            return parallels;
+        }
+
         function formatOddsValue(odds) {
-            // Handle if odds is just a number
             if (!isNaN(odds)) {
                 const num = parseFloat(odds);
                 if (num >= 1) return `1:${num}`;
                 if (num > 0) return `${Math.round(1/num)}:1`;
             }
-            // Already formatted
             if (odds.includes(':')) return odds;
             return `1:${odds}`;
         }
@@ -271,39 +279,145 @@
             return 'text-red-400';
         }
 
-        // ============ HIDDEN GEM DETECTION ============
-        function findHiddenGem(productId, config) {
+        function getRarityBg(oddsStr) {
+            const odds = parseOdds(oddsStr);
+            if (!odds || odds < 1) return 'bg-emerald-500';
+            if (odds <= 20) return 'bg-emerald-500';
+            if (odds <= 100) return 'bg-blue-500';
+            if (odds <= 500) return 'bg-violet-500';
+            if (odds <= 2000) return 'bg-amber-500';
+            if (odds <= 10000) return 'bg-orange-500';
+            return 'bg-red-500';
+        }
+
+        function getRarityTier(oddsStr) {
+            const odds = parseOdds(oddsStr);
+            if (!odds || odds <= 10) return { name: 'Common', emoji: '🟢', color: 'emerald' };
+            if (odds <= 50) return { name: 'Uncommon', emoji: '🔵', color: 'blue' };
+            if (odds <= 200) return { name: 'Rare', emoji: '🟣', color: 'violet' };
+            return { name: 'Chase', emoji: '🟠', color: 'orange' };
+        }
+
+        // ============ INSIGHT CALCULATIONS ============
+        function findSleeperHit(productId, config) {
             const odds = getOddsForProduct(productId, config);
             
-            // Look for inserts that are surprisingly rare compared to their peers
-            if (odds.inserts && odds.inserts.length > 1) {
-                const regularInserts = odds.inserts.filter(i => i.type !== 'ssp');
-                if (regularInserts.length > 1) {
-                    // Sort by odds (higher = rarer)
-                    const sorted = regularInserts
-                        .filter(i => i.odds)
-                        .sort((a, b) => parseOdds(b.odds) - parseOdds(a.odds));
+            if (odds.base_parallels && odds.base_parallels.length > 1) {
+                const sorted = odds.base_parallels
+                    .filter(p => p.odds)
+                    .sort((a, b) => parseOdds(b.odds) - parseOdds(a.odds));
+                
+                if (sorted.length >= 2) {
+                    const rarest = sorted[0];
+                    const secondRarest = sorted[1];
+                    const rarestOdds = parseOdds(rarest.odds);
+                    const secondOdds = parseOdds(secondRarest.odds);
                     
-                    if (sorted.length >= 2) {
-                        const rarest = sorted[0];
-                        const secondRarest = sorted[1];
-                        const rarestOdds = parseOdds(rarest.odds);
-                        const secondOdds = parseOdds(secondRarest.odds);
-                        
-                        // If rarest is 3x+ harder than second rarest, it's a hidden gem
-                        if (rarestOdds > secondOdds * 3) {
-                            return {
-                                card: `${rarest.name} Insert`,
-                                odds: rarest.odds,
-                                reason: `${Math.round(rarestOdds / secondOdds)}x rarer than ${secondRarest.name} (${secondRarest.odds})`,
-                                comparison: 'Overlooked insert that\'s harder to pull than most realize'
-                            };
-                        }
+                    if (rarestOdds > secondOdds * 3) {
+                        return {
+                            card: rarest.name,
+                            odds: rarest.odds,
+                            reason: `${Math.round(rarestOdds / secondOdds)}x rarer than ${secondRarest.name}`,
+                            comparison: 'Overlooked parallel that\'s harder to pull than most realize'
+                        };
                     }
                 }
             }
-            
             return null;
+        }
+
+        function findBestValueConfig(productId, parallelName) {
+            const configs = getAvailableConfigs(productId);
+            let bestConfig = null;
+            let bestOdds = Infinity;
+            
+            configs.forEach(config => {
+                const row = ODDS_RAW.find(r => 
+                    r.product_id === productId && 
+                    r.config === config && 
+                    (r.parallel === parallelName || r.card_type === parallelName)
+                );
+                if (row && row.odds) {
+                    const odds = parseFloat(row.odds);
+                    if (odds < bestOdds) {
+                        bestOdds = odds;
+                        bestConfig = config;
+                    }
+                }
+            });
+            
+            return bestConfig ? { config: bestConfig, odds: `1:${bestOdds}` } : null;
+        }
+
+        function findChaseCards(productId, config) {
+            const filtered = ODDS_RAW.filter(row => 
+                row.product_id === productId && row.config === config && row.odds
+            );
+            
+            return filtered
+                .map(row => ({
+                    name: row.parallel || row.card_type,
+                    category: row.category,
+                    odds: formatOddsValue(row.odds),
+                    oddsNum: parseFloat(row.odds)
+                }))
+                .filter(c => c.oddsNum >= 200)
+                .sort((a, b) => b.oddsNum - a.oddsNum)
+                .slice(0, 5);
+        }
+
+        function calculateExpectedHits(productId, config) {
+            const product = PRODUCTS[productId];
+            if (!product) return [];
+            
+            const configInfo = product.configs[config];
+            if (!configInfo) return [];
+            
+            const totalCards = configInfo.packs * configInfo.cardsPerPack;
+            
+            const filtered = ODDS_RAW.filter(row => 
+                row.product_id === productId && row.config === config && row.category === 'base' && row.odds
+            );
+            
+            return filtered.map(row => {
+                const odds = parseFloat(row.odds);
+                const expected = totalCards / odds;
+                return {
+                    name: row.parallel || row.card_type,
+                    odds: formatOddsValue(row.odds),
+                    expected: expected,
+                    display: expected >= 1 ? expected.toFixed(1) : `${(expected * 100).toFixed(0)}%`
+                };
+            }).sort((a, b) => b.expected - a.expected);
+        }
+
+        function groupByRarityTier(productId, config) {
+            const filtered = ODDS_RAW.filter(row => 
+                row.product_id === productId && row.config === config && row.odds
+            );
+            
+            const tiers = {
+                common: [],
+                uncommon: [],
+                rare: [],
+                chase: []
+            };
+            
+            filtered.forEach(row => {
+                const odds = parseFloat(row.odds);
+                const item = {
+                    name: row.parallel || row.card_type,
+                    category: row.category,
+                    odds: formatOddsValue(row.odds)
+                };
+                
+                if (odds <= 10) tiers.common.push(item);
+                else if (odds <= 50) tiers.uncommon.push(item);
+                else if (odds <= 200) tiers.rare.push(item);
+                else tiers.chase.push(item);
+            });
+            
+            return tiers;
         }
 
         // ============ URL / DEEP LINKING ============
@@ -313,6 +427,7 @@
             if (state.year) params.set('year', state.year);
             if (state.product) params.set('product', state.product);
             if (state.config) params.set('config', state.config);
+            if (state.view !== 'odds') params.set('view', state.view);
             
             const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
             window.history.replaceState({}, '', newURL);
@@ -324,8 +439,10 @@
             const year = params.get('year');
             const product = params.get('product');
             const config = params.get('config');
+            const view = params.get('view');
 
             if (config) state.config = config;
+            if (view) state.view = view;
 
             if (sport && getAvailableSports().includes(sport)) {
                 document.getElementById('sportSelect').value = sport;
@@ -380,7 +497,6 @@
         function onProductChange(productId, updateUrl = true) {
             state.product = productId;
             
-            // Set default config to first available
             const availableConfigs = getAvailableConfigs(productId);
             if (availableConfigs.length > 0 && !availableConfigs.includes(state.config)) {
                 state.config = availableConfigs[0];
@@ -398,28 +514,46 @@
             updateURL();
         }
 
-        // ============ RENDER ============
-        function renderProductContent() {
-            const product = PRODUCTS[state.product];
-            if (!product) {
-                document.getElementById('productContent').innerHTML = '<p class="text-zinc-500">No data available</p>';
-                return;
-            }
+        function setView(view) {
+            state.view = view;
+            renderProductContent();
+            updateURL();
+        }
 
-            const currentOdds = getOddsForProduct(state.product, state.config);
-            const hiddenGem = findHiddenGem(state.product, state.config);
-            const availableConfigs = getAvailableConfigs(state.product);
-            const configInfo = product.configs[state.config] || {};
-            const totalCards = (configInfo.packs || 0) * (configInfo.cardsPerPack || 0);
-
-            document.getElementById('productContent').innerHTML = `
-                <!-- Product Header -->
-                <div class="mb-6">
-                    <h2 class="text-xl font-semibold text-white">${product.name}</h2>
-                    <p class="text-zinc-500 text-sm mt-1">${product.sport} • ${product.brand} • ${product.year}</p>
+        // ============ RENDER FUNCTIONS ============
+        function renderViewTabs(availableConfigs) {
+            return `
+                <!-- View Tabs -->
+                <div class="flex flex-wrap gap-2 mb-4 border-b border-zinc-800 pb-4">
+                    <button onclick="setView('odds')" 
+                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
+                        ${state.view === 'odds' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
+                        📊 Odds
+                    </button>
+                    <button onclick="setView('compare')" 
+                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
+                        ${state.view === 'compare' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
+                        ⚖️ Compare
+                    </button>
+                    <button onclick="setView('ladder')" 
+                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
+                        ${state.view === 'ladder' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
+                        🪜 Ladder
+                    </button>
+                    <button onclick="setView('calculator')" 
+                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
+                        ${state.view === 'calculator' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
+                        🧮 Calculator
+                    </button>
+                    <button onclick="setView('insights')" 
+                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
+                        ${state.view === 'insights' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
+                        💡 Insights
+                    </button>
                 </div>
 
-                <!-- Config Tabs -->
+                <!-- Config Tabs (only show for odds view) -->
+                ${state.view === 'odds' ? `
                 <div class="flex flex-wrap gap-2 mb-6">
                     ${availableConfigs.map(key => `
                         <button onclick="setConfig('${key}')" 
@@ -431,7 +565,18 @@
                         </button>
                     `).join('')}
                 </div>
+                ` : ''}
+            `;
+        }
 
+        function renderOddsView() {
+            const currentOdds = getOddsForProduct(state.product, state.config);
+            const sleeperHit = findSleeperHit(state.product, state.config);
+            const product = PRODUCTS[state.product];
+            const configInfo = product.configs[state.config] || {};
+            const totalCards = (configInfo.packs || 0) * (configInfo.cardsPerPack || 0);
+
+            return `
                 <!-- Box Info -->
                 <div class="bg-zinc-900 rounded-lg p-4 mb-6 flex flex-wrap gap-6">
                     <div>
@@ -448,17 +593,16 @@
                     </div>
                 </div>
 
-                <!-- Hidden Gem -->
-                ${hiddenGem ? `
-                <div class="gem-gradient rounded-lg p-4 mb-6">
+                <!-- Sleeper Hit -->
+                ${sleeperHit ? `
+                <div class="sleeper-gradient rounded-lg p-4 mb-6">
                     <div class="flex items-start gap-3">
                         <div class="text-2xl">💤</div>
                         <div>
                             <div class="text-xs uppercase tracking-wide text-amber-900 font-semibold mb-1">Sleeper Hit</div>
-                            <div class="text-lg font-bold text-zinc-900">${hiddenGem.card}</div>
-                            <div class="text-amber-900 font-semibold">${hiddenGem.odds}</div>
-                            <p class="text-amber-900/80 text-sm mt-2">${hiddenGem.reason}</p>
-                            <p class="text-amber-900/60 text-xs mt-1">${hiddenGem.comparison}</p>
+                            <div class="text-lg font-bold text-zinc-900">${sleeperHit.card}</div>
+                            <div class="text-amber-900 font-semibold">${sleeperHit.odds}</div>
+                            <p class="text-amber-900/80 text-sm mt-2">${sleeperHit.reason}</p>
                         </div>
                     </div>
                 </div>
@@ -492,7 +636,6 @@
                                 <div class="flex items-center gap-3">
                                     <span class="text-zinc-200">${p.name}</span>
                                     ${p.type === 'ssp' ? `<span class="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded">SSP</span>` : ''}
-                                    ${p.checklist ? `<span class="text-xs text-zinc-500">${p.checklist} cards</span>` : ''}
                                 </div>
                                 <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
                             </div>
@@ -508,28 +651,356 @@
                     <div class="grid gap-2">
                         ${currentOdds.autographs.map(p => `
                             <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-zinc-200">${p.name}</span>
-                                    ${p.checklist ? `<span class="text-xs text-zinc-500">${p.checklist} signers</span>` : ''}
-                                </div>
+                                <span class="text-zinc-200">${p.name}</span>
                                 <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
                             </div>
                         `).join('')}
                     </div>
                 </div>
                 ` : ''}
+            `;
+        }
 
-                <!-- No Data Message -->
-                ${!currentOdds.base_parallels && !currentOdds.inserts && !currentOdds.autographs ? `
-                <div class="text-center py-12">
-                    <p class="text-zinc-500">No odds data for ${state.config} configuration yet.</p>
-                    <p class="text-zinc-600 text-sm mt-2">Add data to the Google Sheet to see it here.</p>
+        function renderCompareView() {
+            const parallels = getAllParallelsForProduct(state.product);
+            const configs = getAvailableConfigs(state.product);
+
+            return `
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-2">⚖️ Config Comparison</h3>
+                    <p class="text-zinc-500 text-sm">Compare odds across all box types</p>
                 </div>
-                ` : ''}
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-zinc-800">
+                                <th class="text-left py-3 px-2 text-zinc-400 font-medium">Parallel</th>
+                                ${configs.map(c => `
+                                    <th class="text-center py-3 px-2 text-zinc-400 font-medium capitalize">${c}</th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${Array.from(parallels.entries()).map(([name, configOdds]) => {
+                                // Find best (lowest) odds
+                                let bestConfig = null;
+                                let bestOddsNum = Infinity;
+                                configs.forEach(c => {
+                                    if (configOdds[c]) {
+                                        const num = parseOdds(configOdds[c]);
+                                        if (num < bestOddsNum) {
+                                            bestOddsNum = num;
+                                            bestConfig = c;
+                                        }
+                                    }
+                                });
+                                
+                                return `
+                                    <tr class="border-b border-zinc-800/50">
+                                        <td class="py-3 px-2 text-zinc-200">${name}</td>
+                                        ${configs.map(c => {
+                                            const odds = configOdds[c];
+                                            const isBest = c === bestConfig && configs.length > 1;
+                                            return `
+                                                <td class="text-center py-3 px-2">
+                                                    <span class="font-mono ${isBest ? 'text-emerald-400 font-bold' : getRarityColor(odds)}">
+                                                        ${odds || '—'}
+                                                    </span>
+                                                    ${isBest ? '<span class="ml-1 text-xs">✓</span>' : ''}
+                                                </td>
+                                            `;
+                                        }).join('')}
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 text-xs text-zinc-600">
+                    ✓ = Best odds for this parallel
+                </div>
+            `;
+        }
+
+        function renderLadderView() {
+            const currentOdds = getOddsForProduct(state.product, state.config);
+            if (!currentOdds.base_parallels) return '<p class="text-zinc-500">No parallel data available</p>';
+
+            const sorted = [...currentOdds.base_parallels]
+                .filter(p => p.odds)
+                .sort((a, b) => parseOdds(a.odds) - parseOdds(b.odds));
+
+            const maxOdds = Math.max(...sorted.map(p => parseOdds(p.odds)));
+
+            return `
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-2">🪜 Rarity Ladder</h3>
+                    <p class="text-zinc-500 text-sm">Visual progression from common to chase</p>
+                    
+                    <!-- Config selector for ladder -->
+                    <div class="flex flex-wrap gap-2 mt-4">
+                        ${getAvailableConfigs(state.product).map(key => `
+                            <button onclick="setConfig('${key}')" 
+                                class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize
+                                ${state.config === key 
+                                    ? 'bg-zinc-700 text-white' 
+                                    : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">
+                                ${key}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    ${sorted.map(p => {
+                        const odds = parseOdds(p.odds);
+                        const width = Math.min(100, (Math.log(odds + 1) / Math.log(maxOdds + 1)) * 100);
+                        const tier = getRarityTier(p.odds);
+                        
+                        return `
+                            <div class="bg-zinc-900 rounded-lg p-3">
+                                <div class="flex justify-between items-center mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm">${tier.emoji}</span>
+                                        <span class="text-zinc-200 font-medium">${p.name}</span>
+                                    </div>
+                                    <span class="font-mono text-sm ${getRarityColor(p.odds)}">${p.odds}</span>
+                                </div>
+                                <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div class="h-full ${getRarityBg(p.odds)} ladder-bar rounded-full" style="width: ${Math.max(5, width)}%"></div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+
+                <div class="mt-6 flex flex-wrap gap-4 text-xs text-zinc-500">
+                    <span>🟢 Common (1:1-1:10)</span>
+                    <span>🔵 Uncommon (1:11-1:50)</span>
+                    <span>🟣 Rare (1:51-1:200)</span>
+                    <span>🟠 Chase (1:200+)</span>
+                </div>
+            `;
+        }
+
+        function renderCalculatorView() {
+            const product = PRODUCTS[state.product];
+            const expected = calculateExpectedHits(state.product, state.config);
+            const configInfo = product.configs[state.config] || {};
+            const totalCards = (configInfo.packs || 0) * (configInfo.cardsPerPack || 0);
+
+            return `
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-2">🧮 Expected Hits Calculator</h3>
+                    <p class="text-zinc-500 text-sm">What you can expect to pull per box</p>
+                    
+                    <!-- Config selector -->
+                    <div class="flex flex-wrap gap-2 mt-4">
+                        ${getAvailableConfigs(state.product).map(key => `
+                            <button onclick="setConfig('${key}')" 
+                                class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize
+                                ${state.config === key 
+                                    ? 'bg-zinc-700 text-white' 
+                                    : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">
+                                ${key}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="bg-zinc-900 rounded-lg p-4 mb-6">
+                    <div class="text-zinc-500 text-xs uppercase tracking-wide mb-1">Box Configuration</div>
+                    <div class="text-white">
+                        <span class="text-2xl font-bold">${totalCards}</span>
+                        <span class="text-zinc-400 ml-2">total cards (${configInfo.packs} packs × ${configInfo.cardsPerPack} cards)</span>
+                    </div>
+                </div>
+
+                <div class="grid gap-2">
+                    ${expected.map(e => {
+                        const isGuaranteed = e.expected >= 1;
+                        return `
+                            <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-zinc-200">${e.name}</span>
+                                    <span class="text-xs text-zinc-500">${e.odds}</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-mono font-bold ${isGuaranteed ? 'text-emerald-400' : 'text-amber-400'}">
+                                        ${isGuaranteed ? '~' + e.display : e.display + ' chance'}
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+
+                <div class="mt-4 text-xs text-zinc-600">
+                    Note: These are statistical averages. Actual results will vary.
+                </div>
+            `;
+        }
+
+        function renderInsightsView() {
+            const chaseCards = findChaseCards(state.product, state.config);
+            const tiers = groupByRarityTier(state.product, state.config);
+            const sleeperHit = findSleeperHit(state.product, state.config);
+
+            // Find best value parallels
+            const parallels = getAllParallelsForProduct(state.product);
+            const bestValues = [];
+            parallels.forEach((configOdds, name) => {
+                const best = findBestValueConfig(state.product, name);
+                if (best) {
+                    bestValues.push({ name, ...best });
+                }
+            });
+
+            return `
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-2">💡 Insights Dashboard</h3>
+                    <p class="text-zinc-500 text-sm">Key insights and analysis for this product</p>
+                    
+                    <!-- Config selector -->
+                    <div class="flex flex-wrap gap-2 mt-4">
+                        ${getAvailableConfigs(state.product).map(key => `
+                            <button onclick="setConfig('${key}')" 
+                                class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize
+                                ${state.config === key 
+                                    ? 'bg-zinc-700 text-white' 
+                                    : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">
+                                ${key}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="grid gap-6 md:grid-cols-2">
+                    <!-- Sleeper Hit -->
+                    ${sleeperHit ? `
+                    <div class="sleeper-gradient rounded-lg p-4">
+                        <div class="flex items-start gap-3">
+                            <div class="text-2xl">💤</div>
+                            <div>
+                                <div class="text-xs uppercase tracking-wide text-amber-900 font-semibold mb-1">Sleeper Hit</div>
+                                <div class="text-lg font-bold text-zinc-900">${sleeperHit.card}</div>
+                                <div class="text-amber-900 font-semibold">${sleeperHit.odds}</div>
+                                <p class="text-amber-900/80 text-sm mt-1">${sleeperHit.reason}</p>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- Chase Cards -->
+                    <div class="bg-zinc-900 rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="text-xl">🎯</span>
+                            <h4 class="font-semibold text-white">Chase Cards</h4>
+                        </div>
+                        ${chaseCards.length > 0 ? `
+                            <div class="space-y-2">
+                                ${chaseCards.map(c => `
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-zinc-300 text-sm">${c.name}</span>
+                                        <span class="font-mono text-xs ${getRarityColor(c.odds)}">${c.odds}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<p class="text-zinc-500 text-sm">No chase cards (1:200+) in this config</p>'}
+                    </div>
+
+                    <!-- Best Value Configs -->
+                    <div class="bg-zinc-900 rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="text-xl">💰</span>
+                            <h4 class="font-semibold text-white">Best Value Config</h4>
+                        </div>
+                        <div class="space-y-2">
+                            ${bestValues.slice(0, 5).map(v => `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-zinc-300 text-sm">${v.name}</span>
+                                    <span class="text-xs">
+                                        <span class="text-emerald-400 font-medium capitalize">${v.config}</span>
+                                        <span class="text-zinc-500 ml-1">${v.odds}</span>
+                                    </span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Rarity Breakdown -->
+                    <div class="bg-zinc-900 rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="text-xl">📊</span>
+                            <h4 class="font-semibold text-white">Rarity Breakdown</h4>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="text-center p-2 bg-emerald-500/10 rounded">
+                                <div class="text-2xl font-bold text-emerald-400">${tiers.common.length}</div>
+                                <div class="text-xs text-zinc-500">Common</div>
+                            </div>
+                            <div class="text-center p-2 bg-blue-500/10 rounded">
+                                <div class="text-2xl font-bold text-blue-400">${tiers.uncommon.length}</div>
+                                <div class="text-xs text-zinc-500">Uncommon</div>
+                            </div>
+                            <div class="text-center p-2 bg-violet-500/10 rounded">
+                                <div class="text-2xl font-bold text-violet-400">${tiers.rare.length}</div>
+                                <div class="text-xs text-zinc-500">Rare</div>
+                            </div>
+                            <div class="text-center p-2 bg-orange-500/10 rounded">
+                                <div class="text-2xl font-bold text-orange-400">${tiers.chase.length}</div>
+                                <div class="text-xs text-zinc-500">Chase</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============ MAIN RENDER ============
+        function renderProductContent() {
+            const product = PRODUCTS[state.product];
+            if (!product) {
+                document.getElementById('productContent').innerHTML = '<p class="text-zinc-500">No data available</p>';
+                return;
+            }
+
+            const availableConfigs = getAvailableConfigs(state.product);
+
+            let viewContent = '';
+            switch (state.view) {
+                case 'compare':
+                    viewContent = renderCompareView();
+                    break;
+                case 'ladder':
+                    viewContent = renderLadderView();
+                    break;
+                case 'calculator':
+                    viewContent = renderCalculatorView();
+                    break;
+                case 'insights':
+                    viewContent = renderInsightsView();
+                    break;
+                default:
+                    viewContent = renderOddsView();
+            }
+
+            document.getElementById('productContent').innerHTML = `
+                <!-- Product Header -->
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold text-white">${product.name}</h2>
+                    <p class="text-zinc-500 text-sm mt-1">${product.sport} • ${product.brand} • ${product.year}</p>
+                </div>
+
+                ${renderViewTabs(availableConfigs)}
+
+                ${viewContent}
 
                 <!-- Footer -->
                 <div class="text-center text-zinc-600 text-xs mt-12 pb-8">
-                    Data from Google Sheets. Last loaded: ${new Date().toLocaleTimeString()}
+                    Data from Google Sheets • Last loaded: ${new Date().toLocaleTimeString()}
                 </div>
             `;
         }
@@ -545,7 +1016,6 @@
 
         async function loadData() {
             try {
-                // Fetch all sheets in parallel
                 const [productsData, oddsData, checklistData] = await Promise.all([
                     fetchSheet('products'),
                     fetchSheet('odds'),
