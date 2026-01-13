@@ -75,13 +75,20 @@
     <script>
         // ============ GOOGLE SHEETS CONFIG ============
         const SHEET_ID = '1m_snihKKWJEGRfwaNdoIiR4-eMrO0YYmm7mnD_8HteQ';
-        const SHEETS = {
-            products: 'products',
-            odds: 'odds',
-            checklist: 'checklist'
+        
+        // GID for each tab
+        const SHEET_GIDS = {
+            products: 0,
+            odds: 2126001521,
+            checklist: 444343756
         };
 
         function getSheetURL(tabName) {
+            const gid = SHEET_GIDS[tabName];
+            if (gid !== null) {
+                return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+            }
+            // Fallback to sheet name method
             return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
         }
 
