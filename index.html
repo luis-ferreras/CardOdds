@@ -547,23 +547,26 @@
             try {
                 // Fetch all sheets in parallel
                 const [productsData, oddsData, checklistData] = await Promise.all([
-                    fetchSheet(SHEETS.products),
-                    fetchSheet(SHEETS.odds),
-                    fetchSheet(SHEETS.checklist)
+                    fetchSheet('products'),
+                    fetchSheet('odds'),
+                    fetchSheet('checklist')
                 ]);
+
+                console.log('Raw products data:', productsData);
 
                 PRODUCTS = processProducts(productsData);
                 ODDS_RAW = oddsData;
                 CHECKLIST = checklistData;
 
                 console.log('✓ Data loaded from Google Sheets');
-                console.log('  Products:', Object.keys(PRODUCTS).length);
+                console.log('  Products:', PRODUCTS);
+                console.log('  Sports:', getAvailableSports());
                 console.log('  Odds rows:', ODDS_RAW.length);
-                console.log('  Checklist rows:', CHECKLIST.length);
 
                 return true;
             } catch (error) {
                 console.error('✗ Failed to load from Google Sheets:', error.message);
+                console.error('Full error:', error);
                 return false;
             }
         }
