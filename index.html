@@ -24,7 +24,6 @@
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
     <div class="w-full min-h-screen px-4 py-6 sm:px-6 md:px-8 lg:px-12 max-w-6xl mx-auto">
         
-        <!-- Header -->
         <header class="mb-8">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -32,7 +31,6 @@
                     <p class="text-zinc-500 text-sm mt-1">Trading Card Odds Visualizer</p>
                 </div>
                 
-                <!-- 3 Dropdowns -->
                 <div class="flex flex-col sm:flex-row gap-2">
                     <select id="sportSelect" class="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-zinc-500">
                         <option value="" disabled selected>Sport...</option>
@@ -47,15 +45,12 @@
             </div>
         </header>
 
-        <!-- Main Content -->
         <main>
-            <!-- Loading State -->
             <div id="loadingState" class="flex flex-col items-center justify-center py-20">
                 <div class="text-4xl mb-4 loading-pulse">🎴</div>
                 <p class="text-zinc-500 text-sm">Loading data from Google Sheets...</p>
             </div>
 
-            <!-- Error State -->
             <div id="errorState" class="hidden flex flex-col items-center justify-center py-20">
                 <div class="text-4xl mb-4">⚠️</div>
                 <h2 class="text-xl font-semibold text-zinc-300 mb-2">Unable to Load Data</h2>
@@ -63,7 +58,6 @@
                 <p class="text-zinc-600 text-xs text-center max-w-md">This will work when hosted on GitHub Pages or your own domain.</p>
             </div>
 
-            <!-- Empty State -->
             <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20">
                 <div class="text-6xl mb-6">🎴</div>
                 <h2 class="text-xl font-semibold text-zinc-300 mb-2">Select a Product</h2>
@@ -72,18 +66,11 @@
 
             <div id="productContent" class="hidden"></div>
         </main>
-
     </div>
 
     <script>
-        // ============ GOOGLE SHEETS CONFIG ============
         const SHEET_ID = '1m_snihKKWJEGRfwaNdoIiR4-eMrO0YYmm7mnD_8HteQ';
-        
-        const SHEET_GIDS = {
-            products: 0,
-            odds: 2126001521,
-            checklist: 444343756
-        };
+        const SHEET_GIDS = { products: 0, odds: 2126001521, checklist: 444343756 };
 
         function getSheetURL(tabName) {
             const gid = SHEET_GIDS[tabName];
@@ -93,7 +80,6 @@
             return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
         }
 
-        // ============ CSV PARSER ============
         function parseCSV(csvText) {
             const lines = csvText.split('\n');
             if (lines.length === 0) return [];
@@ -130,21 +116,18 @@
             return result.map(s => s.replace(/^"|"$/g, ''));
         }
 
-        // ============ DATA ============
         let PRODUCTS = {};
         let ODDS_RAW = [];
         let CHECKLIST = [];
 
-        // ============ STATE ============
         let state = { 
             sport: null, 
             year: null, 
             product: null,
             config: 'hobby',
-            view: 'odds' // odds, compare, ladder, calculator, insights
+            view: 'compare'
         };
 
-        // ============ DATA PROCESSING ============
         function processProducts(rows) {
             const products = {};
             rows.forEach(row => {
@@ -169,35 +152,23 @@
         }
 
         function getOddsForProduct(productId, config) {
-            const filtered = ODDS_RAW.filter(row => 
-                row.product_id === productId && row.config === config
-            );
-
-            const baseParallels = filtered
-                .filter(row => row.category === 'base')
-                .map(row => ({
-                    name: row.parallel || row.card_type,
-                    odds: row.odds ? formatOddsValue(row.odds) : null,
-                    numbered: row.numbered || null
-                }));
-
-            const inserts = filtered
-                .filter(row => row.category === 'insert')
-                .map(row => ({
-                    name: row.card_type,
-                    odds: row.odds ? formatOddsValue(row.odds) : null,
-                    type: row.parallel === 'SSP' ? 'ssp' : 'insert',
-                    checklist: row.checklist ? parseInt(row.checklist) : null
-                }));
-
-            const autographs = filtered
-                .filter(row => row.category === 'auto')
-                .map(row => ({
-                    name: row.card_type,
-                    odds: row.odds ? formatOddsValue(row.odds) : null,
-                    checklist: row.checklist ? parseInt(row.checklist) : null
-                }));
-
+            const filtered = ODDS_RAW.filter(row => row.product_id === productId && row.config === config);
+            const baseParallels = filtered.filter(row => row.category === 'base').map(row => ({
+                name: row.parallel || row.card_type,
+                odds: row.odds ? formatOddsValue(row.odds) : null,
+                numbered: row.numbered || null
+            }));
+            const inserts = filtered.filter(row => row.category === 'insert').map(row => ({
+                name: row.card_type,
+                odds: row.odds ? formatOddsValue(row.odds) : null,
+                type: row.parallel === 'SSP' ? 'ssp' : 'insert',
+                checklist: row.checklist ? parseInt(row.checklist) : null
+            }));
+            const autographs = filtered.filter(row => row.category === 'auto').map(row => ({
+                name: row.card_type,
+                odds: row.odds ? formatOddsValue(row.odds) : null,
+                checklist: row.checklist ? parseInt(row.checklist) : null
+            }));
             return {
                 base_parallels: baseParallels.length > 0 ? baseParallels : null,
                 inserts: inserts.length > 0 ? inserts : null,
@@ -206,17 +177,33 @@
         }
 
         function getAllParallelsForProduct(productId) {
-            // Get unique parallels across all configs
             const parallels = new Map();
-            ODDS_RAW.filter(row => row.product_id === productId && row.category === 'base')
-                .forEach(row => {
-                    const name = row.parallel || row.card_type;
-                    if (!parallels.has(name)) {
-                        parallels.set(name, {});
-                    }
-                    parallels.get(name)[row.config] = row.odds ? formatOddsValue(row.odds) : null;
-                });
+            ODDS_RAW.filter(row => row.product_id === productId && row.category === 'base').forEach(row => {
+                const name = row.parallel || row.card_type;
+                if (!parallels.has(name)) parallels.set(name, {});
+                parallels.get(name)[row.config] = row.odds ? formatOddsValue(row.odds) : null;
+            });
             return parallels;
+        }
+
+        function getAllInsertsForProduct(productId) {
+            const inserts = new Map();
+            ODDS_RAW.filter(row => row.product_id === productId && row.category === 'insert').forEach(row => {
+                const name = row.card_type;
+                if (!inserts.has(name)) inserts.set(name, { isSSP: row.parallel === 'SSP' });
+                inserts.get(name)[row.config] = row.odds ? formatOddsValue(row.odds) : null;
+            });
+            return inserts;
+        }
+
+        function getAllAutographsForProduct(productId) {
+            const autos = new Map();
+            ODDS_RAW.filter(row => row.product_id === productId && row.category === 'auto').forEach(row => {
+                const name = row.card_type;
+                if (!autos.has(name)) autos.set(name, {});
+                autos.get(name)[row.config] = row.odds ? formatOddsValue(row.odds) : null;
+            });
+            return autos;
         }
 
         function formatOddsValue(odds) {
@@ -231,12 +218,10 @@
 
         function getAvailableConfigs(productId) {
             const configs = new Set();
-            ODDS_RAW.filter(row => row.product_id === productId)
-                .forEach(row => configs.add(row.config));
+            ODDS_RAW.filter(row => row.product_id === productId).forEach(row => configs.add(row.config));
             return Array.from(configs);
         }
 
-        // ============ HELPERS ============
         function getAvailableSports() {
             const sports = new Set();
             Object.values(PRODUCTS).forEach(p => sports.add(p.sport));
@@ -264,9 +249,7 @@
             return denom;
         }
 
-        function formatOdds(oddsStr) {
-            return oddsStr || '—';
-        }
+        function formatOdds(oddsStr) { return oddsStr || '—'; }
 
         function getRarityColor(oddsStr) {
             const odds = parseOdds(oddsStr);
@@ -298,21 +281,15 @@
             return { name: 'Chase', emoji: '🟠', color: 'orange' };
         }
 
-        // ============ INSIGHT CALCULATIONS ============
         function findSleeperHit(productId, config) {
             const odds = getOddsForProduct(productId, config);
-            
             if (odds.base_parallels && odds.base_parallels.length > 1) {
-                const sorted = odds.base_parallels
-                    .filter(p => p.odds)
-                    .sort((a, b) => parseOdds(b.odds) - parseOdds(a.odds));
-                
+                const sorted = odds.base_parallels.filter(p => p.odds).sort((a, b) => parseOdds(b.odds) - parseOdds(a.odds));
                 if (sorted.length >= 2) {
                     const rarest = sorted[0];
                     const secondRarest = sorted[1];
                     const rarestOdds = parseOdds(rarest.odds);
                     const secondOdds = parseOdds(secondRarest.odds);
-                    
                     if (rarestOdds > secondOdds * 3) {
                         return {
                             card: rarest.name,
@@ -330,55 +307,33 @@
             const configs = getAvailableConfigs(productId);
             let bestConfig = null;
             let bestOdds = Infinity;
-            
             configs.forEach(config => {
-                const row = ODDS_RAW.find(r => 
-                    r.product_id === productId && 
-                    r.config === config && 
-                    (r.parallel === parallelName || r.card_type === parallelName)
-                );
+                const row = ODDS_RAW.find(r => r.product_id === productId && r.config === config && (r.parallel === parallelName || r.card_type === parallelName));
                 if (row && row.odds) {
                     const odds = parseFloat(row.odds);
-                    if (odds < bestOdds) {
-                        bestOdds = odds;
-                        bestConfig = config;
-                    }
+                    if (odds < bestOdds) { bestOdds = odds; bestConfig = config; }
                 }
             });
-            
             return bestConfig ? { config: bestConfig, odds: `1:${bestOdds}` } : null;
         }
 
         function findChaseCards(productId, config) {
-            const filtered = ODDS_RAW.filter(row => 
-                row.product_id === productId && row.config === config && row.odds
-            );
-            
-            return filtered
-                .map(row => ({
-                    name: row.parallel || row.card_type,
-                    category: row.category,
-                    odds: formatOddsValue(row.odds),
-                    oddsNum: parseFloat(row.odds)
-                }))
-                .filter(c => c.oddsNum >= 200)
-                .sort((a, b) => b.oddsNum - a.oddsNum)
-                .slice(0, 5);
+            const filtered = ODDS_RAW.filter(row => row.product_id === productId && row.config === config && row.odds);
+            return filtered.map(row => ({
+                name: row.parallel || row.card_type,
+                category: row.category,
+                odds: formatOddsValue(row.odds),
+                oddsNum: parseFloat(row.odds)
+            })).filter(c => c.oddsNum >= 200).sort((a, b) => b.oddsNum - a.oddsNum).slice(0, 5);
         }
 
         function calculateExpectedHits(productId, config) {
             const product = PRODUCTS[productId];
             if (!product) return [];
-            
             const configInfo = product.configs[config];
             if (!configInfo) return [];
-            
             const totalCards = configInfo.packs * configInfo.cardsPerPack;
-            
-            const filtered = ODDS_RAW.filter(row => 
-                row.product_id === productId && row.config === config && row.category === 'base' && row.odds
-            );
-            
+            const filtered = ODDS_RAW.filter(row => row.product_id === productId && row.config === config && row.category === 'base' && row.odds);
             return filtered.map(row => {
                 const odds = parseFloat(row.odds);
                 const expected = totalCards / odds;
@@ -392,43 +347,26 @@
         }
 
         function groupByRarityTier(productId, config) {
-            const filtered = ODDS_RAW.filter(row => 
-                row.product_id === productId && row.config === config && row.odds
-            );
-            
-            const tiers = {
-                common: [],
-                uncommon: [],
-                rare: [],
-                chase: []
-            };
-            
+            const filtered = ODDS_RAW.filter(row => row.product_id === productId && row.config === config && row.odds);
+            const tiers = { common: [], uncommon: [], rare: [], chase: [] };
             filtered.forEach(row => {
                 const odds = parseFloat(row.odds);
-                const item = {
-                    name: row.parallel || row.card_type,
-                    category: row.category,
-                    odds: formatOddsValue(row.odds)
-                };
-                
+                const item = { name: row.parallel || row.card_type, category: row.category, odds: formatOddsValue(row.odds) };
                 if (odds <= 10) tiers.common.push(item);
                 else if (odds <= 50) tiers.uncommon.push(item);
                 else if (odds <= 200) tiers.rare.push(item);
                 else tiers.chase.push(item);
             });
-            
             return tiers;
         }
 
-        // ============ URL / DEEP LINKING ============
         function updateURL() {
             const params = new URLSearchParams();
             if (state.sport) params.set('sport', state.sport);
             if (state.year) params.set('year', state.year);
             if (state.product) params.set('product', state.product);
             if (state.config) params.set('config', state.config);
-            if (state.view !== 'odds') params.set('view', state.view);
-            
+            if (state.view !== 'compare') params.set('view', state.view);
             const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
             window.history.replaceState({}, '', newURL);
         }
@@ -440,18 +378,14 @@
             const product = params.get('product');
             const config = params.get('config');
             const view = params.get('view');
-
             if (config) state.config = config;
-            if (view) state.view = view;
-
+            if (view && ['compare', 'ladder', 'calculator', 'insights'].includes(view)) state.view = view;
             if (sport && getAvailableSports().includes(sport)) {
                 document.getElementById('sportSelect').value = sport;
                 onSportChange(sport, false);
-
                 if (year && getYearsBySport(sport).includes(year)) {
                     document.getElementById('yearSelect').value = year;
                     onYearChange(year, false);
-
                     if (product && PRODUCTS[product]) {
                         document.getElementById('productSelect').value = product;
                         onProductChange(product, false);
@@ -460,48 +394,39 @@
             }
         }
 
-        // ============ HANDLERS ============
         function onSportChange(sport, updateUrl = true) {
             state.sport = sport;
             state.year = null;
             state.product = null;
-
             const yearSelect = document.getElementById('yearSelect');
             const years = getYearsBySport(sport);
             yearSelect.innerHTML = '<option value="" disabled selected>Year...</option>';
             years.forEach(y => yearSelect.innerHTML += `<option value="${y}">${y}</option>`);
             yearSelect.disabled = false;
-
             document.getElementById('productSelect').innerHTML = '<option value="" disabled selected>Product...</option>';
             document.getElementById('productSelect').disabled = true;
-            
             document.getElementById('emptyState').classList.remove('hidden');
             document.getElementById('productContent').classList.add('hidden');
-
             if (updateUrl) updateURL();
         }
 
         function onYearChange(year, updateUrl = true) {
             state.year = year;
             state.product = null;
-
             const productSelect = document.getElementById('productSelect');
             const products = getProducts(state.sport, year);
             productSelect.innerHTML = '<option value="" disabled selected>Product...</option>';
             products.forEach(p => productSelect.innerHTML += `<option value="${p.id}">${p.brand}</option>`);
             productSelect.disabled = false;
-
             if (updateUrl) updateURL();
         }
 
         function onProductChange(productId, updateUrl = true) {
             state.product = productId;
-            
             const availableConfigs = getAvailableConfigs(productId);
             if (availableConfigs.length > 0 && !availableConfigs.includes(state.config)) {
                 state.config = availableConfigs[0];
             }
-            
             document.getElementById('emptyState').classList.add('hidden');
             document.getElementById('productContent').classList.remove('hidden');
             renderProductContent();
@@ -520,245 +445,96 @@
             updateURL();
         }
 
-        // ============ RENDER FUNCTIONS ============
-        function renderViewTabs(availableConfigs) {
+        function renderViewTabs() {
             return `
-                <!-- View Tabs -->
-                <div class="flex flex-wrap gap-2 mb-4 border-b border-zinc-800 pb-4">
-                    <button onclick="setView('odds')" 
-                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
-                        ${state.view === 'odds' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
-                        📊 Odds
-                    </button>
-                    <button onclick="setView('compare')" 
-                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
-                        ${state.view === 'compare' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
-                        ⚖️ Compare
-                    </button>
-                    <button onclick="setView('ladder')" 
-                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
-                        ${state.view === 'ladder' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
-                        🪜 Ladder
-                    </button>
-                    <button onclick="setView('calculator')" 
-                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
-                        ${state.view === 'calculator' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
-                        🧮 Calculator
-                    </button>
-                    <button onclick="setView('insights')" 
-                        class="px-3 py-1.5 rounded text-sm font-medium transition-all
-                        ${state.view === 'insights' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">
-                        💡 Insights
-                    </button>
+                <div class="flex flex-wrap gap-2 mb-6 border-b border-zinc-800 pb-4">
+                    <button onclick="setView('compare')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'compare' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">⚖️ Compare</button>
+                    <button onclick="setView('ladder')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'ladder' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">🪜 Ladder</button>
+                    <button onclick="setView('calculator')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'calculator' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">🧮 Calculator</button>
+                    <button onclick="setView('insights')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'insights' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">💡 Insights</button>
                 </div>
-
-                <!-- Config Tabs (only show for odds view) -->
-                ${state.view === 'odds' ? `
-                <div class="flex flex-wrap gap-2 mb-6">
-                    ${availableConfigs.map(key => `
-                        <button onclick="setConfig('${key}')" 
-                            class="px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize
-                            ${state.config === key 
-                                ? 'bg-white text-zinc-900' 
-                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}">
-                            ${key}
-                        </button>
-                    `).join('')}
-                </div>
-                ` : ''}
             `;
         }
 
-        function renderOddsView() {
-            const currentOdds = getOddsForProduct(state.product, state.config);
-            const sleeperHit = findSleeperHit(state.product, state.config);
-            const product = PRODUCTS[state.product];
-            const configInfo = product.configs[state.config] || {};
-            const totalCards = (configInfo.packs || 0) * (configInfo.cardsPerPack || 0);
-
+        function renderComparisonTable(title, dataMap, configs, showSSP = false) {
+            if (dataMap.size === 0) return '';
             return `
-                <!-- Box Info -->
-                <div class="bg-zinc-900 rounded-lg p-4 mb-6 flex flex-wrap gap-6">
-                    <div>
-                        <div class="text-zinc-500 text-xs uppercase tracking-wide">Packs</div>
-                        <div class="text-xl font-bold text-white">${configInfo.packs || '—'}</div>
-                    </div>
-                    <div>
-                        <div class="text-zinc-500 text-xs uppercase tracking-wide">Cards/Pack</div>
-                        <div class="text-xl font-bold text-white">${configInfo.cardsPerPack || '—'}</div>
-                    </div>
-                    <div>
-                        <div class="text-zinc-500 text-xs uppercase tracking-wide">Total Cards</div>
-                        <div class="text-xl font-bold text-white">${totalCards || '—'}</div>
-                    </div>
-                </div>
-
-                <!-- Sleeper Hit -->
-                ${sleeperHit ? `
-                <div class="sleeper-gradient rounded-lg p-4 mb-6">
-                    <div class="flex items-start gap-3">
-                        <div class="text-2xl">💤</div>
-                        <div>
-                            <div class="text-xs uppercase tracking-wide text-amber-900 font-semibold mb-1">Sleeper Hit</div>
-                            <div class="text-lg font-bold text-zinc-900">${sleeperHit.card}</div>
-                            <div class="text-amber-900 font-semibold">${sleeperHit.odds}</div>
-                            <p class="text-amber-900/80 text-sm mt-2">${sleeperHit.reason}</p>
-                        </div>
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- Base Parallels -->
-                ${currentOdds.base_parallels ? `
                 <div class="mb-8">
-                    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Base Parallels</h3>
-                    <div class="grid gap-2">
-                        ${currentOdds.base_parallels.map(p => `
-                            <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-zinc-200">${p.name}</span>
-                                    ${p.numbered ? `<span class="text-xs text-zinc-500">${p.numbered}</span>` : ''}
-                                </div>
-                                <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
-                            </div>
-                        `).join('')}
+                    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">${title}</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-zinc-800">
+                                    <th class="text-left py-3 px-2 text-zinc-400 font-medium">Name</th>
+                                    ${configs.map(c => `<th class="text-center py-3 px-2 text-zinc-400 font-medium capitalize">${c}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${Array.from(dataMap.entries()).map(([name, configOdds]) => {
+                                    let bestConfig = null;
+                                    let bestOddsNum = Infinity;
+                                    configs.forEach(c => {
+                                        if (configOdds[c]) {
+                                            const num = parseOdds(configOdds[c]);
+                                            if (num < bestOddsNum) { bestOddsNum = num; bestConfig = c; }
+                                        }
+                                    });
+                                    const isSSP = showSSP && configOdds.isSSP;
+                                    return `
+                                        <tr class="border-b border-zinc-800/50">
+                                            <td class="py-3 px-2 text-zinc-200">${name}${isSSP ? '<span class="ml-2 text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded">SSP</span>' : ''}</td>
+                                            ${configs.map(c => {
+                                                const odds = configOdds[c];
+                                                const isBest = c === bestConfig && configs.length > 1;
+                                                return `<td class="text-center py-3 px-2"><span class="font-mono ${isBest ? 'text-emerald-400 font-bold' : getRarityColor(odds)}">${odds || '—'}</span>${isBest ? '<span class="ml-1 text-xs">✓</span>' : ''}</td>`;
+                                            }).join('')}
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                ` : ''}
-
-                <!-- Inserts -->
-                ${currentOdds.inserts ? `
-                <div class="mb-8">
-                    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Inserts</h3>
-                    <div class="grid gap-2">
-                        ${currentOdds.inserts.map(p => `
-                            <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-zinc-200">${p.name}</span>
-                                    ${p.type === 'ssp' ? `<span class="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded">SSP</span>` : ''}
-                                </div>
-                                <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- Autographs -->
-                ${currentOdds.autographs ? `
-                <div class="mb-8">
-                    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Autographs</h3>
-                    <div class="grid gap-2">
-                        ${currentOdds.autographs.map(p => `
-                            <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
-                                <span class="text-zinc-200">${p.name}</span>
-                                <span class="font-mono font-semibold ${getRarityColor(p.odds)}">${formatOdds(p.odds)}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                ` : ''}
             `;
         }
 
         function renderCompareView() {
             const parallels = getAllParallelsForProduct(state.product);
+            const inserts = getAllInsertsForProduct(state.product);
+            const autographs = getAllAutographsForProduct(state.product);
             const configs = getAvailableConfigs(state.product);
-
             return `
                 <div class="mb-6">
                     <h3 class="text-lg font-semibold text-white mb-2">⚖️ Config Comparison</h3>
                     <p class="text-zinc-500 text-sm">Compare odds across all box types</p>
                 </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b border-zinc-800">
-                                <th class="text-left py-3 px-2 text-zinc-400 font-medium">Parallel</th>
-                                ${configs.map(c => `
-                                    <th class="text-center py-3 px-2 text-zinc-400 font-medium capitalize">${c}</th>
-                                `).join('')}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${Array.from(parallels.entries()).map(([name, configOdds]) => {
-                                // Find best (lowest) odds
-                                let bestConfig = null;
-                                let bestOddsNum = Infinity;
-                                configs.forEach(c => {
-                                    if (configOdds[c]) {
-                                        const num = parseOdds(configOdds[c]);
-                                        if (num < bestOddsNum) {
-                                            bestOddsNum = num;
-                                            bestConfig = c;
-                                        }
-                                    }
-                                });
-                                
-                                return `
-                                    <tr class="border-b border-zinc-800/50">
-                                        <td class="py-3 px-2 text-zinc-200">${name}</td>
-                                        ${configs.map(c => {
-                                            const odds = configOdds[c];
-                                            const isBest = c === bestConfig && configs.length > 1;
-                                            return `
-                                                <td class="text-center py-3 px-2">
-                                                    <span class="font-mono ${isBest ? 'text-emerald-400 font-bold' : getRarityColor(odds)}">
-                                                        ${odds || '—'}
-                                                    </span>
-                                                    ${isBest ? '<span class="ml-1 text-xs">✓</span>' : ''}
-                                                </td>
-                                            `;
-                                        }).join('')}
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="mt-4 text-xs text-zinc-600">
-                    ✓ = Best odds for this parallel
-                </div>
+                ${renderComparisonTable('Base Parallels', parallels, configs)}
+                ${renderComparisonTable('Inserts', inserts, configs, true)}
+                ${renderComparisonTable('Autographs', autographs, configs)}
+                <div class="mt-4 text-xs text-zinc-600">✓ = Best odds for this card</div>
             `;
         }
 
         function renderLadderView() {
             const currentOdds = getOddsForProduct(state.product, state.config);
             if (!currentOdds.base_parallels) return '<p class="text-zinc-500">No parallel data available</p>';
-
-            const sorted = [...currentOdds.base_parallels]
-                .filter(p => p.odds)
-                .sort((a, b) => parseOdds(a.odds) - parseOdds(b.odds));
-
+            const sorted = [...currentOdds.base_parallels].filter(p => p.odds).sort((a, b) => parseOdds(a.odds) - parseOdds(b.odds));
             const maxOdds = Math.max(...sorted.map(p => parseOdds(p.odds)));
-
             return `
                 <div class="mb-6">
                     <h3 class="text-lg font-semibold text-white mb-2">🪜 Rarity Ladder</h3>
                     <p class="text-zinc-500 text-sm">Visual progression from common to chase</p>
-                    
-                    <!-- Config selector for ladder -->
                     <div class="flex flex-wrap gap-2 mt-4">
                         ${getAvailableConfigs(state.product).map(key => `
-                            <button onclick="setConfig('${key}')" 
-                                class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize
-                                ${state.config === key 
-                                    ? 'bg-zinc-700 text-white' 
-                                    : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">
-                                ${key}
-                            </button>
+                            <button onclick="setConfig('${key}')" class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize ${state.config === key ? 'bg-zinc-700 text-white' : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">${key}</button>
                         `).join('')}
                     </div>
                 </div>
-
                 <div class="space-y-3">
                     ${sorted.map(p => {
                         const odds = parseOdds(p.odds);
                         const width = Math.min(100, (Math.log(odds + 1) / Math.log(maxOdds + 1)) * 100);
                         const tier = getRarityTier(p.odds);
-                        
                         return `
                             <div class="bg-zinc-900 rounded-lg p-3">
                                 <div class="flex justify-between items-center mb-2">
@@ -775,7 +551,6 @@
                         `;
                     }).join('')}
                 </div>
-
                 <div class="mt-6 flex flex-wrap gap-4 text-xs text-zinc-500">
                     <span>🟢 Common (1:1-1:10)</span>
                     <span>🔵 Uncommon (1:11-1:50)</span>
@@ -790,26 +565,16 @@
             const expected = calculateExpectedHits(state.product, state.config);
             const configInfo = product.configs[state.config] || {};
             const totalCards = (configInfo.packs || 0) * (configInfo.cardsPerPack || 0);
-
             return `
                 <div class="mb-6">
                     <h3 class="text-lg font-semibold text-white mb-2">🧮 Expected Hits Calculator</h3>
                     <p class="text-zinc-500 text-sm">What you can expect to pull per box</p>
-                    
-                    <!-- Config selector -->
                     <div class="flex flex-wrap gap-2 mt-4">
                         ${getAvailableConfigs(state.product).map(key => `
-                            <button onclick="setConfig('${key}')" 
-                                class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize
-                                ${state.config === key 
-                                    ? 'bg-zinc-700 text-white' 
-                                    : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">
-                                ${key}
-                            </button>
+                            <button onclick="setConfig('${key}')" class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize ${state.config === key ? 'bg-zinc-700 text-white' : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">${key}</button>
                         `).join('')}
                     </div>
                 </div>
-
                 <div class="bg-zinc-900 rounded-lg p-4 mb-6">
                     <div class="text-zinc-500 text-xs uppercase tracking-wide mb-1">Box Configuration</div>
                     <div class="text-white">
@@ -817,7 +582,6 @@
                         <span class="text-zinc-400 ml-2">total cards (${configInfo.packs} packs × ${configInfo.cardsPerPack} cards)</span>
                     </div>
                 </div>
-
                 <div class="grid gap-2">
                     ${expected.map(e => {
                         const isGuaranteed = e.expected >= 1;
@@ -828,18 +592,13 @@
                                     <span class="text-xs text-zinc-500">${e.odds}</span>
                                 </div>
                                 <div class="text-right">
-                                    <span class="font-mono font-bold ${isGuaranteed ? 'text-emerald-400' : 'text-amber-400'}">
-                                        ${isGuaranteed ? '~' + e.display : e.display + ' chance'}
-                                    </span>
+                                    <span class="font-mono font-bold ${isGuaranteed ? 'text-emerald-400' : 'text-amber-400'}">${isGuaranteed ? '~' + e.display : e.display + ' chance'}</span>
                                 </div>
                             </div>
                         `;
                     }).join('')}
                 </div>
-
-                <div class="mt-4 text-xs text-zinc-600">
-                    Note: These are statistical averages. Actual results will vary.
-                </div>
+                <div class="mt-4 text-xs text-zinc-600">Note: These are statistical averages. Actual results will vary.</div>
             `;
         }
 
@@ -847,38 +606,23 @@
             const chaseCards = findChaseCards(state.product, state.config);
             const tiers = groupByRarityTier(state.product, state.config);
             const sleeperHit = findSleeperHit(state.product, state.config);
-
-            // Find best value parallels
             const parallels = getAllParallelsForProduct(state.product);
             const bestValues = [];
             parallels.forEach((configOdds, name) => {
                 const best = findBestValueConfig(state.product, name);
-                if (best) {
-                    bestValues.push({ name, ...best });
-                }
+                if (best) bestValues.push({ name, ...best });
             });
-
             return `
                 <div class="mb-6">
                     <h3 class="text-lg font-semibold text-white mb-2">💡 Insights Dashboard</h3>
                     <p class="text-zinc-500 text-sm">Key insights and analysis for this product</p>
-                    
-                    <!-- Config selector -->
                     <div class="flex flex-wrap gap-2 mt-4">
                         ${getAvailableConfigs(state.product).map(key => `
-                            <button onclick="setConfig('${key}')" 
-                                class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize
-                                ${state.config === key 
-                                    ? 'bg-zinc-700 text-white' 
-                                    : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">
-                                ${key}
-                            </button>
+                            <button onclick="setConfig('${key}')" class="px-3 py-1.5 rounded text-xs font-medium transition-all capitalize ${state.config === key ? 'bg-zinc-700 text-white' : 'bg-zinc-800/50 text-zinc-500 hover:text-zinc-300'}">${key}</button>
                         `).join('')}
                     </div>
                 </div>
-
                 <div class="grid gap-6 md:grid-cols-2">
-                    <!-- Sleeper Hit -->
                     ${sleeperHit ? `
                     <div class="sleeper-gradient rounded-lg p-4">
                         <div class="flex items-start gap-3">
@@ -892,8 +636,6 @@
                         </div>
                     </div>
                     ` : ''}
-
-                    <!-- Chase Cards -->
                     <div class="bg-zinc-900 rounded-lg p-4">
                         <div class="flex items-center gap-2 mb-3">
                             <span class="text-xl">🎯</span>
@@ -910,8 +652,6 @@
                             </div>
                         ` : '<p class="text-zinc-500 text-sm">No chase cards (1:200+) in this config</p>'}
                     </div>
-
-                    <!-- Best Value Configs -->
                     <div class="bg-zinc-900 rounded-lg p-4">
                         <div class="flex items-center gap-2 mb-3">
                             <span class="text-xl">💰</span>
@@ -929,8 +669,6 @@
                             `).join('')}
                         </div>
                     </div>
-
-                    <!-- Rarity Breakdown -->
                     <div class="bg-zinc-900 rounded-lg p-4">
                         <div class="flex items-center gap-2 mb-3">
                             <span class="text-xl">📊</span>
@@ -959,53 +697,30 @@
             `;
         }
 
-        // ============ MAIN RENDER ============
         function renderProductContent() {
             const product = PRODUCTS[state.product];
             if (!product) {
                 document.getElementById('productContent').innerHTML = '<p class="text-zinc-500">No data available</p>';
                 return;
             }
-
-            const availableConfigs = getAvailableConfigs(state.product);
-
             let viewContent = '';
             switch (state.view) {
-                case 'compare':
-                    viewContent = renderCompareView();
-                    break;
-                case 'ladder':
-                    viewContent = renderLadderView();
-                    break;
-                case 'calculator':
-                    viewContent = renderCalculatorView();
-                    break;
-                case 'insights':
-                    viewContent = renderInsightsView();
-                    break;
-                default:
-                    viewContent = renderOddsView();
+                case 'ladder': viewContent = renderLadderView(); break;
+                case 'calculator': viewContent = renderCalculatorView(); break;
+                case 'insights': viewContent = renderInsightsView(); break;
+                default: viewContent = renderCompareView();
             }
-
             document.getElementById('productContent').innerHTML = `
-                <!-- Product Header -->
                 <div class="mb-6">
                     <h2 class="text-xl font-semibold text-white">${product.name}</h2>
                     <p class="text-zinc-500 text-sm mt-1">${product.sport} • ${product.brand} • ${product.year}</p>
                 </div>
-
-                ${renderViewTabs(availableConfigs)}
-
+                ${renderViewTabs()}
                 ${viewContent}
-
-                <!-- Footer -->
-                <div class="text-center text-zinc-600 text-xs mt-12 pb-8">
-                    Data from Google Sheets • Last loaded: ${new Date().toLocaleTimeString()}
-                </div>
+                <div class="text-center text-zinc-600 text-xs mt-12 pb-8">Data from Google Sheets • Last loaded: ${new Date().toLocaleTimeString()}</div>
             `;
         }
 
-        // ============ DATA LOADING ============
         async function fetchSheet(tabName) {
             const url = getSheetURL(tabName);
             const response = await fetch(url);
@@ -1021,52 +736,35 @@
                     fetchSheet('odds'),
                     fetchSheet('checklist')
                 ]);
-
-                console.log('Raw products data:', productsData);
-
                 PRODUCTS = processProducts(productsData);
                 ODDS_RAW = oddsData;
                 CHECKLIST = checklistData;
-
                 console.log('✓ Data loaded from Google Sheets');
-                console.log('  Products:', PRODUCTS);
-                console.log('  Sports:', getAvailableSports());
-                console.log('  Odds rows:', ODDS_RAW.length);
-
                 return true;
             } catch (error) {
                 console.error('✗ Failed to load from Google Sheets:', error.message);
-                console.error('Full error:', error);
                 return false;
             }
         }
 
-        // ============ INIT ============
         async function init() {
             const loadingState = document.getElementById('loadingState');
             const errorState = document.getElementById('errorState');
             const emptyState = document.getElementById('emptyState');
-
             const success = await loadData();
-
             loadingState.classList.add('hidden');
-
             if (!success) {
                 errorState.classList.remove('hidden');
                 return;
             }
-
             emptyState.classList.remove('hidden');
-
             const sportSelect = document.getElementById('sportSelect');
             getAvailableSports().forEach(sport => {
                 sportSelect.innerHTML += `<option value="${sport}">${sport}</option>`;
             });
-
             sportSelect.addEventListener('change', e => onSportChange(e.target.value));
             document.getElementById('yearSelect').addEventListener('change', e => onYearChange(e.target.value));
             document.getElementById('productSelect').addEventListener('change', e => onProductChange(e.target.value));
-
             loadFromURL();
         }
 
