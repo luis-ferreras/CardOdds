@@ -76,7 +76,7 @@ function loadStateFromURL() {
     const view = params.get('view');
     
     if (config) state.config = config;
-    if (view && ['compare', 'ladder', 'calculator', 'insights'].includes(view)) state.view = view;
+    if (view && ['compare', 'bubbles', 'calculator', 'insights'].includes(view)) state.view = view;
     
     if (sport && getAvailableSports().includes(sport)) {
         document.getElementById('sportSelect').value = sport;
