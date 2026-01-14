@@ -1,9 +1,9 @@
 import { loadData, getAvailableSports, getYearsBySport, getProducts, getAvailableConfigs, PRODUCTS } from './data.js';
-import { state, updateURL, loadFromURL } from './state.js';
+import { state, updateURL } from './state.js';
 import { renderProductContent } from './render.js';
 
 // Event Handlers
-function onSportChange(sport, updateUrl = true) {
+function onSportChange(sport, doUpdateUrl = true) {
     state.sport = sport;
     state.year = null;
     state.product = null;
@@ -19,10 +19,10 @@ function onSportChange(sport, updateUrl = true) {
     document.getElementById('emptyState').classList.remove('hidden');
     document.getElementById('productContent').classList.add('hidden');
     
-    if (updateUrl) updateURL();
+    if (doUpdateUrl) updateURL();
 }
 
-function onYearChange(year, updateUrl = true) {
+function onYearChange(year, doUpdateUrl = true) {
     state.year = year;
     state.product = null;
     
@@ -32,10 +32,10 @@ function onYearChange(year, updateUrl = true) {
     products.forEach(p => productSelect.innerHTML += `<option value="${p.id}">${p.brand}</option>`);
     productSelect.disabled = false;
     
-    if (updateUrl) updateURL();
+    if (doUpdateUrl) updateURL();
 }
 
-function onProductChange(productId, updateUrl = true) {
+function onProductChange(productId, doUpdateUrl = true) {
     state.product = productId;
     
     const availableConfigs = getAvailableConfigs(productId);
@@ -47,7 +47,7 @@ function onProductChange(productId, updateUrl = true) {
     document.getElementById('productContent').classList.remove('hidden');
     renderProductContent();
     
-    if (updateUrl) updateURL();
+    if (doUpdateUrl) updateURL();
 }
 
 function setConfig(config) {
