@@ -7,7 +7,7 @@ export function renderViewTabs() {
     return `
         <div class="flex flex-wrap gap-2 mb-6 border-b border-zinc-800 pb-4">
             <button onclick="setView('compare')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'compare' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">⚖️ Compare</button>
-            <button onclick="setView('ladder')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'ladder' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">🪜 Ladder</button>
+            <button onclick="setView('bubbles')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'bubbles' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">🫧 Bubbles</button>
             <button onclick="setView('calculator')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'calculator' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">🧮 Calculator</button>
             <button onclick="setView('insights')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'insights' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">💡 Insights</button>
         </div>
@@ -83,44 +83,220 @@ export function renderCompareView() {
     `;
 }
 
-export function renderLadderView() {
+export function renderBubblesView() {
     const currentOdds = getOddsForProduct(state.product, state.config);
     if (!currentOdds.base_parallels) return '<p class="text-zinc-500">No parallel data available</p>';
-    const sorted = [...currentOdds.base_parallels].filter(p => p.odds).sort((a, b) => parseOdds(a.odds) - parseOdds(b.odds));
-    const maxOdds = Math.max(...sorted.map(p => parseOdds(p.odds)));
+    
+    // Prepare data for bubbles
+    const bubbleData = currentOdds.base_parallels
+        .filter(p => p.odds)
+        .map(p => {
+            const odds = parseOdds(p.odds);
+            const tier = getRarityTier(p.odds);
+            return {
+                name: p.name,
+                odds: p.odds,
+                oddsNum: odds,
+                tier: tier.name,
+                color: tier.color
+            };
+        });
+    
+    // Encode data for the script
+    const dataJSON = JSON.stringify(bubbleData);
+    
     return `
         <div class="mb-6">
-            <h3 class="text-lg font-semibold text-white mb-2">🪜 Rarity Ladder</h3>
-            <p class="text-zinc-500 text-sm">Visual progression from common to chase</p>
+            <h3 class="text-lg font-semibold text-white mb-2">🫧 Rarity Bubbles</h3>
+            <p class="text-zinc-500 text-sm">Bubble size = pull rate. Bigger = easier to pull.</p>
             ${renderConfigSelector(state.product)}
         </div>
-        <div class="space-y-3">
-            ${sorted.map(p => {
-                const odds = parseOdds(p.odds);
-                const width = Math.min(100, (Math.log(odds + 1) / Math.log(maxOdds + 1)) * 100);
-                const tier = getRarityTier(p.odds);
-                return `
-                    <div class="bg-zinc-900 rounded-lg p-3">
-                        <div class="flex justify-between items-center mb-2">
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm">${tier.emoji}</span>
-                                <span class="text-zinc-200 font-medium">${p.name}</span>
-                            </div>
-                            <span class="font-mono text-sm ${getRarityColor(p.odds)}">${p.odds}</span>
-                        </div>
-                        <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                            <div class="h-full ${getRarityBg(p.odds)} ladder-bar rounded-full" style="width: ${Math.max(5, width)}%"></div>
-                        </div>
-                    </div>
-                `;
-            }).join('')}
+        
+        <div id="bubbleChart" class="w-full h-[500px] bg-zinc-900 rounded-lg relative overflow-hidden"></div>
+        
+        <div class="mt-6 flex flex-wrap justify-center gap-6 text-xs text-zinc-500">
+            <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> Common (1:1-1:10)</span>
+            <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-blue-500"></span> Uncommon (1:11-1:50)</span>
+            <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-violet-500"></span> Rare (1:51-1:200)</span>
+            <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-orange-500"></span> Chase (1:200+)</span>
         </div>
-        <div class="mt-6 flex flex-wrap gap-4 text-xs text-zinc-500">
-            <span>🟢 Common (1:1-1:10)</span>
-            <span>🔵 Uncommon (1:11-1:50)</span>
-            <span>🟣 Rare (1:51-1:200)</span>
-            <span>🟠 Chase (1:200+)</span>
-        </div>
+        
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+        <script>
+        (function() {
+            const data = ${dataJSON};
+            const container = document.getElementById('bubbleChart');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            // Clear previous
+            container.innerHTML = '';
+            
+            // Color mapping
+            const colors = {
+                emerald: '#10b981',
+                blue: '#3b82f6',
+                violet: '#8b5cf6',
+                orange: '#f97316'
+            };
+            
+            // Calculate bubble sizes (inverse of odds - rarer = smaller)
+            const maxOdds = Math.max(...data.map(d => d.oddsNum));
+            const minRadius = 15;
+            const maxRadius = 80;
+            
+            data.forEach(d => {
+                // Inverse log scale: common cards get bigger bubbles
+                const logMax = Math.log(maxOdds + 1);
+                const logOdds = Math.log(d.oddsNum + 1);
+                d.radius = maxRadius - ((logOdds / logMax) * (maxRadius - minRadius));
+            });
+            
+            // Create SVG
+            const svg = d3.select('#bubbleChart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+            
+            // Create force simulation
+            const simulation = d3.forceSimulation(data)
+                .force('charge', d3.forceManyBody().strength(5))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(d => d.radius + 4))
+                .force('x', d3.forceX(width / 2).strength(0.05))
+                .force('y', d3.forceY(height / 2).strength(0.05));
+            
+            // Create bubble groups
+            const bubbles = svg.selectAll('g')
+                .data(data)
+                .enter()
+                .append('g')
+                .style('cursor', 'pointer')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+            
+            // Add circles with glow effect
+            bubbles.append('circle')
+                .attr('r', d => d.radius)
+                .attr('fill', d => colors[d.color])
+                .attr('fill-opacity', 0.7)
+                .attr('stroke', d => colors[d.color])
+                .attr('stroke-width', 2)
+                .attr('stroke-opacity', 0.9)
+                .style('filter', 'url(#glow)');
+            
+            // Add glow filter
+            const defs = svg.append('defs');
+            const filter = defs.append('filter')
+                .attr('id', 'glow')
+                .attr('x', '-50%')
+                .attr('y', '-50%')
+                .attr('width', '200%')
+                .attr('height', '200%');
+            filter.append('feGaussianBlur')
+                .attr('stdDeviation', '3')
+                .attr('result', 'coloredBlur');
+            const feMerge = filter.append('feMerge');
+            feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+            feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+            
+            // Add labels
+            bubbles.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', '-0.2em')
+                .attr('fill', 'white')
+                .attr('font-size', d => Math.max(10, d.radius / 4))
+                .attr('font-weight', '600')
+                .attr('pointer-events', 'none')
+                .text(d => d.name.length > 12 ? d.name.slice(0, 10) + '...' : d.name);
+            
+            // Add odds labels
+            bubbles.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', '1em')
+                .attr('fill', 'rgba(255,255,255,0.7)')
+                .attr('font-size', d => Math.max(9, d.radius / 5))
+                .attr('pointer-events', 'none')
+                .text(d => d.odds);
+            
+            // Tooltip
+            const tooltip = d3.select('#bubbleChart')
+                .append('div')
+                .style('position', 'absolute')
+                .style('background', 'rgba(0,0,0,0.9)')
+                .style('border', '1px solid rgba(255,255,255,0.2)')
+                .style('border-radius', '8px')
+                .style('padding', '12px')
+                .style('pointer-events', 'none')
+                .style('opacity', 0)
+                .style('transition', 'opacity 0.2s')
+                .style('z-index', 10);
+            
+            bubbles
+                .on('mouseover', function(event, d) {
+                    d3.select(this).select('circle')
+                        .transition()
+                        .duration(200)
+                        .attr('fill-opacity', 1)
+                        .attr('r', d.radius * 1.1);
+                    
+                    tooltip
+                        .style('opacity', 1)
+                        .html('<div style="font-weight:bold;font-size:14px;margin-bottom:4px;">' + d.name + '</div>' +
+                              '<div style="color:#10b981;font-size:16px;font-weight:bold;">' + d.odds + '</div>' +
+                              '<div style="color:#888;font-size:11px;margin-top:4px;">' + d.tier + '</div>');
+                })
+                .on('mousemove', function(event) {
+                    tooltip
+                        .style('left', (event.offsetX + 15) + 'px')
+                        .style('top', (event.offsetY - 10) + 'px');
+                })
+                .on('mouseout', function(event, d) {
+                    d3.select(this).select('circle')
+                        .transition()
+                        .duration(200)
+                        .attr('fill-opacity', 0.7)
+                        .attr('r', d.radius);
+                    
+                    tooltip.style('opacity', 0);
+                });
+            
+            // Update positions on tick
+            simulation.on('tick', () => {
+                bubbles.attr('transform', d => {
+                    // Keep bubbles within bounds
+                    d.x = Math.max(d.radius, Math.min(width - d.radius, d.x));
+                    d.y = Math.max(d.radius, Math.min(height - d.radius, d.y));
+                    return 'translate(' + d.x + ',' + d.y + ')';
+                });
+            });
+            
+            // Drag functions
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+            
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+            
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+            
+            // Gentle floating animation
+            setInterval(() => {
+                simulation.alpha(0.1).restart();
+            }, 3000);
+        })();
+        </script>
     `;
 }
 
@@ -261,7 +437,7 @@ export function renderProductContent() {
     }
     let viewContent = '';
     switch (state.view) {
-        case 'ladder': viewContent = renderLadderView(); break;
+        case 'bubbles': viewContent = renderBubblesView(); break;
         case 'calculator': viewContent = renderCalculatorView(); break;
         case 'insights': viewContent = renderInsightsView(); break;
         default: viewContent = renderCompareView();
