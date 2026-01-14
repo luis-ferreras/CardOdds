@@ -71,14 +71,55 @@ export function renderCompareView() {
     const inserts = getAllInsertsForProduct(state.product);
     const autographs = getAllAutographsForProduct(state.product);
     const configs = getAvailableConfigs(state.product);
+    
+    // Default to 'base' if not set or invalid
+    const subTab = state.compareTab || 'base';
+    
+    // Determine which tables to show
+    let tableContent = '';
+    if (subTab === 'base') {
+        tableContent = parallels.size > 0 
+            ? renderComparisonTable('Base Parallels', parallels, configs)
+            : '<p class="text-zinc-500 text-center py-8">No base parallel data available</p>';
+    } else if (subTab === 'inserts') {
+        tableContent = inserts.size > 0 
+            ? renderComparisonTable('Inserts', inserts, configs, true)
+            : '<p class="text-zinc-500 text-center py-8">No insert data available</p>';
+    } else if (subTab === 'autos') {
+        tableContent = autographs.size > 0 
+            ? renderComparisonTable('Autographs', autographs, configs)
+            : '<p class="text-zinc-500 text-center py-8">No autograph data available</p>';
+    }
+    
+    // Count items for badges
+    const baseCount = parallels.size;
+    const insertCount = inserts.size;
+    const autoCount = autographs.size;
+    
     return `
         <div class="mb-6">
             <h3 class="text-lg font-semibold text-white mb-2">⚖️ Config Comparison</h3>
             <p class="text-zinc-500 text-sm">Compare odds across all box types</p>
         </div>
-        ${renderComparisonTable('Base Parallels', parallels, configs)}
-        ${renderComparisonTable('Inserts', inserts, configs, true)}
-        ${renderComparisonTable('Autographs', autographs, configs)}
+        
+        <!-- Sub-tabs -->
+        <div class="flex gap-1 mb-6 bg-zinc-900 p-1 rounded-lg w-fit">
+            <button onclick="setCompareTab('base')" 
+                class="px-4 py-2 rounded-md text-sm font-medium transition-all ${subTab === 'base' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}">
+                Base Parallels ${baseCount > 0 ? '<span class="ml-1 text-xs text-zinc-500">(' + baseCount + ')</span>' : ''}
+            </button>
+            <button onclick="setCompareTab('inserts')" 
+                class="px-4 py-2 rounded-md text-sm font-medium transition-all ${subTab === 'inserts' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}">
+                Inserts ${insertCount > 0 ? '<span class="ml-1 text-xs text-zinc-500">(' + insertCount + ')</span>' : ''}
+            </button>
+            <button onclick="setCompareTab('autos')" 
+                class="px-4 py-2 rounded-md text-sm font-medium transition-all ${subTab === 'autos' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}">
+                Autographs ${autoCount > 0 ? '<span class="ml-1 text-xs text-zinc-500">(' + autoCount + ')</span>' : ''}
+            </button>
+        </div>
+
+        ${tableContent}
+
         <div class="mt-4 text-xs text-zinc-600">✓ = Best odds for this card</div>
     `;
 }
