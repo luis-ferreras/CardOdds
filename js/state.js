@@ -4,7 +4,8 @@ export const state = {
     year: null,
     product: null,
     config: 'hobby',
-    view: 'compare'
+    view: 'compare',
+    compareTab: 'base'
 };
 
 // URL Management
