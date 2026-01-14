@@ -62,9 +62,15 @@ function setView(view) {
     updateURL();
 }
 
+function setCompareTab(tab) {
+    state.compareTab = tab;
+    renderProductContent();
+}
+
 // Make handlers available globally for onclick
 window.setConfig = setConfig;
 window.setView = setView;
+window.setCompareTab = setCompareTab;
 
 // URL loading helper
 function loadStateFromURL() {
