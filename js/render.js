@@ -102,8 +102,11 @@ export function renderBubblesView() {
             };
         });
     
-    // Encode data for the script
-    const dataJSON = JSON.stringify(bubbleData);
+    // Store data globally for the chart function
+    window.bubbleChartData = bubbleData;
+    
+    // Schedule chart rendering after DOM update
+    setTimeout(() => renderBubbleChart(), 0);
     
     return `
         <div class="mb-6">
@@ -112,7 +115,7 @@ export function renderBubblesView() {
             ${renderConfigSelector(state.product)}
         </div>
         
-        <div id="bubbleChart" class="w-full h-[500px] bg-zinc-900 rounded-lg relative overflow-hidden"></div>
+        <div id="bubbleChart" class="w-full bg-zinc-900 rounded-lg relative overflow-hidden" style="height: 500px;"></div>
         
         <div class="mt-6 flex flex-wrap justify-center gap-6 text-xs text-zinc-500">
             <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> Common (1:1-1:10)</span>
@@ -120,184 +123,164 @@ export function renderBubblesView() {
             <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-violet-500"></span> Rare (1:51-1:200)</span>
             <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-orange-500"></span> Chase (1:200+)</span>
         </div>
-        
-        <script src="https://d3js.org/d3.v7.min.js"></script>
-        <script>
-        (function() {
-            const data = ${dataJSON};
-            const container = document.getElementById('bubbleChart');
-            const width = container.clientWidth;
-            const height = container.clientHeight;
-            
-            // Clear previous
-            container.innerHTML = '';
-            
-            // Color mapping
-            const colors = {
-                emerald: '#10b981',
-                blue: '#3b82f6',
-                violet: '#8b5cf6',
-                orange: '#f97316'
-            };
-            
-            // Calculate bubble sizes (inverse of odds - rarer = smaller)
-            const maxOdds = Math.max(...data.map(d => d.oddsNum));
-            const minRadius = 15;
-            const maxRadius = 80;
-            
-            data.forEach(d => {
-                // Inverse log scale: common cards get bigger bubbles
-                const logMax = Math.log(maxOdds + 1);
-                const logOdds = Math.log(d.oddsNum + 1);
-                d.radius = maxRadius - ((logOdds / logMax) * (maxRadius - minRadius));
-            });
-            
-            // Create SVG
-            const svg = d3.select('#bubbleChart')
-                .append('svg')
-                .attr('width', width)
-                .attr('height', height);
-            
-            // Create force simulation
-            const simulation = d3.forceSimulation(data)
-                .force('charge', d3.forceManyBody().strength(5))
-                .force('center', d3.forceCenter(width / 2, height / 2))
-                .force('collision', d3.forceCollide().radius(d => d.radius + 4))
-                .force('x', d3.forceX(width / 2).strength(0.05))
-                .force('y', d3.forceY(height / 2).strength(0.05));
-            
-            // Create bubble groups
-            const bubbles = svg.selectAll('g')
-                .data(data)
-                .enter()
-                .append('g')
-                .style('cursor', 'pointer')
-                .call(d3.drag()
-                    .on('start', dragstarted)
-                    .on('drag', dragged)
-                    .on('end', dragended));
-            
-            // Add circles with glow effect
-            bubbles.append('circle')
-                .attr('r', d => d.radius)
-                .attr('fill', d => colors[d.color])
-                .attr('fill-opacity', 0.7)
-                .attr('stroke', d => colors[d.color])
-                .attr('stroke-width', 2)
-                .attr('stroke-opacity', 0.9)
-                .style('filter', 'url(#glow)');
-            
-            // Add glow filter
-            const defs = svg.append('defs');
-            const filter = defs.append('filter')
-                .attr('id', 'glow')
-                .attr('x', '-50%')
-                .attr('y', '-50%')
-                .attr('width', '200%')
-                .attr('height', '200%');
-            filter.append('feGaussianBlur')
-                .attr('stdDeviation', '3')
-                .attr('result', 'coloredBlur');
-            const feMerge = filter.append('feMerge');
-            feMerge.append('feMergeNode').attr('in', 'coloredBlur');
-            feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
-            
-            // Add labels
-            bubbles.append('text')
-                .attr('text-anchor', 'middle')
-                .attr('dy', '-0.2em')
-                .attr('fill', 'white')
-                .attr('font-size', d => Math.max(10, d.radius / 4))
-                .attr('font-weight', '600')
-                .attr('pointer-events', 'none')
-                .text(d => d.name.length > 12 ? d.name.slice(0, 10) + '...' : d.name);
-            
-            // Add odds labels
-            bubbles.append('text')
-                .attr('text-anchor', 'middle')
-                .attr('dy', '1em')
-                .attr('fill', 'rgba(255,255,255,0.7)')
-                .attr('font-size', d => Math.max(9, d.radius / 5))
-                .attr('pointer-events', 'none')
-                .text(d => d.odds);
-            
-            // Tooltip
-            const tooltip = d3.select('#bubbleChart')
-                .append('div')
-                .style('position', 'absolute')
-                .style('background', 'rgba(0,0,0,0.9)')
-                .style('border', '1px solid rgba(255,255,255,0.2)')
-                .style('border-radius', '8px')
-                .style('padding', '12px')
-                .style('pointer-events', 'none')
-                .style('opacity', 0)
-                .style('transition', 'opacity 0.2s')
-                .style('z-index', 10);
-            
-            bubbles
-                .on('mouseover', function(event, d) {
-                    d3.select(this).select('circle')
-                        .transition()
-                        .duration(200)
-                        .attr('fill-opacity', 1)
-                        .attr('r', d.radius * 1.1);
-                    
-                    tooltip
-                        .style('opacity', 1)
-                        .html('<div style="font-weight:bold;font-size:14px;margin-bottom:4px;">' + d.name + '</div>' +
-                              '<div style="color:#10b981;font-size:16px;font-weight:bold;">' + d.odds + '</div>' +
-                              '<div style="color:#888;font-size:11px;margin-top:4px;">' + d.tier + '</div>');
-                })
-                .on('mousemove', function(event) {
-                    tooltip
-                        .style('left', (event.offsetX + 15) + 'px')
-                        .style('top', (event.offsetY - 10) + 'px');
-                })
-                .on('mouseout', function(event, d) {
-                    d3.select(this).select('circle')
-                        .transition()
-                        .duration(200)
-                        .attr('fill-opacity', 0.7)
-                        .attr('r', d.radius);
-                    
-                    tooltip.style('opacity', 0);
-                });
-            
-            // Update positions on tick
-            simulation.on('tick', () => {
-                bubbles.attr('transform', d => {
-                    // Keep bubbles within bounds
-                    d.x = Math.max(d.radius, Math.min(width - d.radius, d.x));
-                    d.y = Math.max(d.radius, Math.min(height - d.radius, d.y));
-                    return 'translate(' + d.x + ',' + d.y + ')';
-                });
-            });
-            
-            // Drag functions
-            function dragstarted(event, d) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            }
-            
-            function dragged(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-            }
-            
-            function dragended(event, d) {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-            }
-            
-            // Gentle floating animation
-            setInterval(() => {
-                simulation.alpha(0.1).restart();
-            }, 3000);
-        })();
-        </script>
     `;
+}
+
+function renderBubbleChart() {
+    const data = window.bubbleChartData;
+    if (!data) return;
+    
+    const container = document.getElementById('bubbleChart');
+    if (!container) return;
+    
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    
+    // Clear previous
+    container.innerHTML = '';
+    
+    // Color mapping
+    const colors = {
+        emerald: '#10b981',
+        blue: '#3b82f6',
+        violet: '#8b5cf6',
+        orange: '#f97316'
+    };
+    
+    // Calculate bubble sizes (inverse of odds - rarer = smaller)
+    const maxOdds = Math.max(...data.map(d => d.oddsNum));
+    const minRadius = 20;
+    const maxRadius = 70;
+    
+    data.forEach(d => {
+        const logMax = Math.log(maxOdds + 1);
+        const logOdds = Math.log(d.oddsNum + 1);
+        d.radius = maxRadius - ((logOdds / logMax) * (maxRadius - minRadius));
+        d.x = width / 2 + (Math.random() - 0.5) * 100;
+        d.y = height / 2 + (Math.random() - 0.5) * 100;
+    });
+    
+    // Create SVG
+    const svg = d3.select('#bubbleChart')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+    
+    // Add glow filter
+    const defs = svg.append('defs');
+    const filter = defs.append('filter')
+        .attr('id', 'glow')
+        .attr('x', '-50%')
+        .attr('y', '-50%')
+        .attr('width', '200%')
+        .attr('height', '200%');
+    filter.append('feGaussianBlur')
+        .attr('stdDeviation', '4')
+        .attr('result', 'coloredBlur');
+    const feMerge = filter.append('feMerge');
+    feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+    feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+    
+    // Create force simulation
+    const simulation = d3.forceSimulation(data)
+        .force('charge', d3.forceManyBody().strength(10))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(d => d.radius + 5))
+        .force('x', d3.forceX(width / 2).strength(0.05))
+        .force('y', d3.forceY(height / 2).strength(0.05));
+    
+    // Create bubble groups
+    const bubbles = svg.selectAll('g')
+        .data(data)
+        .enter()
+        .append('g')
+        .style('cursor', 'grab')
+        .call(d3.drag()
+            .on('start', dragstarted)
+            .on('drag', dragged)
+            .on('end', dragended));
+    
+    // Add circles
+    bubbles.append('circle')
+        .attr('r', d => d.radius)
+        .attr('fill', d => colors[d.color])
+        .attr('fill-opacity', 0.75)
+        .attr('stroke', d => colors[d.color])
+        .attr('stroke-width', 2)
+        .style('filter', 'url(#glow)');
+    
+    // Add labels
+    bubbles.append('text')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '-0.3em')
+        .attr('fill', 'white')
+        .attr('font-size', d => Math.max(10, d.radius / 4))
+        .attr('font-weight', '600')
+        .attr('pointer-events', 'none')
+        .text(d => d.name.length > 10 ? d.name.slice(0, 8) + '...' : d.name);
+    
+    // Add odds labels
+    bubbles.append('text')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '1.1em')
+        .attr('fill', 'rgba(255,255,255,0.8)')
+        .attr('font-size', d => Math.max(9, d.radius / 5))
+        .attr('font-weight', '500')
+        .attr('pointer-events', 'none')
+        .text(d => d.odds);
+    
+    // Hover effects
+    bubbles
+        .on('mouseover', function(event, d) {
+            d3.select(this).select('circle')
+                .transition()
+                .duration(150)
+                .attr('fill-opacity', 1)
+                .attr('r', d.radius * 1.15);
+        })
+        .on('mouseout', function(event, d) {
+            d3.select(this).select('circle')
+                .transition()
+                .duration(150)
+                .attr('fill-opacity', 0.75)
+                .attr('r', d.radius);
+        });
+    
+    // Update positions on tick
+    simulation.on('tick', () => {
+        bubbles.attr('transform', d => {
+            d.x = Math.max(d.radius, Math.min(width - d.radius, d.x));
+            d.y = Math.max(d.radius, Math.min(height - d.radius, d.y));
+            return `translate(${d.x},${d.y})`;
+        });
+    });
+    
+    // Drag functions
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+    
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+    
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+    
+    // Gentle floating animation
+    window.bubbleInterval = setInterval(() => {
+        if (document.getElementById('bubbleChart')) {
+            simulation.alpha(0.1).restart();
+        } else {
+            clearInterval(window.bubbleInterval);
+        }
+    }, 4000);
 }
 
 export function renderCalculatorView() {
