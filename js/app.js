@@ -72,11 +72,35 @@ function setBoxCount(count) {
     renderProductContent();
 }
 
+function setChecklistSet(set) {
+    state.checklistSet = set;
+    renderProductContent();
+}
+
+function setChecklistTeam(team) {
+    state.checklistTeam = team;
+    renderProductContent();
+}
+
+function setChecklistRookieOnly(checked) {
+    state.checklistRookieOnly = checked;
+    renderProductContent();
+}
+
+function setChecklistSearch(query) {
+    state.checklistSearch = query;
+    renderProductContent();
+}
+
 // Make handlers available globally for onclick
 window.setConfig = setConfig;
 window.setView = setView;
 window.setCompareTab = setCompareTab;
 window.setBoxCount = setBoxCount;
+window.setChecklistSet = setChecklistSet;
+window.setChecklistTeam = setChecklistTeam;
+window.setChecklistRookieOnly = setChecklistRookieOnly;
+window.setChecklistSearch = setChecklistSearch;
 
 // URL loading helper
 function loadStateFromURL() {
@@ -88,7 +112,7 @@ function loadStateFromURL() {
     const view = params.get('view');
     
     if (config) state.config = config;
-    if (view && ['compare', 'bubbles', 'calculator', 'insights'].includes(view)) state.view = view;
+    if (view && ['compare', 'bubbles', 'calculator', 'checklist', 'insights'].includes(view)) state.view = view;
     
     if (sport && getAvailableSports().includes(sport)) {
         document.getElementById('sportSelect').value = sport;
