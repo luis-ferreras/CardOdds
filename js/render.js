@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { PRODUCTS, getAvailableConfigs, getOddsForProduct, getAllParallelsForProduct, getAllInsertsForProduct, getAllAutographsForProduct } from './data.js';
+import { PRODUCTS, ODDS_RAW, getAvailableConfigs, getOddsForProduct, getAllParallelsForProduct, getAllInsertsForProduct, getAllAutographsForProduct, formatOddsValue } from './data.js';
 import { parseOdds, formatOdds, getRarityColor, getRarityBg, getRarityTier } from './utils.js';
 import { findSleeperHit, findBestValueConfig, findChaseCards, calculateExpectedHits, groupByRarityTier } from './insights.js';
 
@@ -326,40 +326,252 @@ function renderBubbleChart() {
 
 export function renderCalculatorView() {
     const product = PRODUCTS[state.product];
-    const expected = calculateExpectedHits(state.product, state.config);
     const configInfo = product.configs[state.config] || {};
     const totalCards = (configInfo.packs || 0) * (configInfo.cardsPerPack || 0);
+    
+    // Get all cards with odds
+    const allCards = ODDS_RAW.filter(row => 
+        row.product_id === state.product && row.config === state.config && row.odds
+    ).map(row => ({
+        name: row.parallel || row.card_type,
+        category: row.category,
+        odds: parseFloat(row.odds),
+        oddsDisplay: formatOddsValue(row.odds)
+    })).sort((a, b) => a.odds - b.odds);
+    
+    // Calculate expected hits for current box count
+    const boxCount = state.boxCount || 1;
+    const totalCardsMulti = totalCards * boxCount;
+    
+    const expected = allCards.map(card => {
+        const exp = totalCardsMulti / card.odds;
+        return {
+            ...card,
+            expected: exp,
+            display: exp >= 1 ? exp.toFixed(1) : (exp * 100).toFixed(1) + '%'
+        };
+    });
+    
+    // Group by rarity for donut chart
+    const tiers = { common: 0, uncommon: 0, rare: 0, chase: 0 };
+    expected.forEach(e => {
+        if (e.odds <= 10) tiers.common += e.expected;
+        else if (e.odds <= 50) tiers.uncommon += e.expected;
+        else if (e.odds <= 200) tiers.rare += e.expected;
+        else tiers.chase += e.expected;
+    });
+    
+    // Store data for chart
+    window.calculatorData = { tiers, totalCards: totalCardsMulti, boxCount };
+    
+    // Schedule chart render
+    setTimeout(() => renderDonutChart(), 0);
+    
+    // Get chase cards for "What Are My Chances"
+    const chaseCards = allCards.filter(c => c.odds >= 100).slice(-10).reverse();
+    
     return `
         <div class="mb-6">
-            <h3 class="text-lg font-semibold text-white mb-2">🧮 Expected Hits Calculator</h3>
-            <p class="text-zinc-500 text-sm">What you can expect to pull per box</p>
+            <h3 class="text-lg font-semibold text-white mb-2">🧮 Box Calculator</h3>
+            <p class="text-zinc-500 text-sm">See what you can expect to pull</p>
             ${renderConfigSelector(state.product)}
         </div>
-        <div class="bg-zinc-900 rounded-lg p-4 mb-6">
-            <div class="text-zinc-500 text-xs uppercase tracking-wide mb-1">Box Configuration</div>
-            <div class="text-white">
-                <span class="text-2xl font-bold">${totalCards}</span>
-                <span class="text-zinc-400 ml-2">total cards (${configInfo.packs} packs × ${configInfo.cardsPerPack} cards)</span>
+        
+        <!-- Box Count Slider -->
+        <div class="bg-zinc-900 rounded-lg p-5 mb-6">
+            <div class="flex items-center justify-between mb-3">
+                <label class="text-zinc-400 text-sm font-medium">Number of Boxes</label>
+                <span class="text-2xl font-bold text-white">${boxCount}</span>
+            </div>
+            <input type="range" min="1" max="20" value="${boxCount}" 
+                onchange="setBoxCount(parseInt(this.value))"
+                class="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+            <div class="flex justify-between text-xs text-zinc-600 mt-1">
+                <span>1 box</span>
+                <span>20 boxes</span>
+            </div>
+            <div class="mt-4 pt-4 border-t border-zinc-800">
+                <div class="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                        <div class="text-zinc-500 text-xs uppercase">Packs</div>
+                        <div class="text-xl font-bold text-white">${configInfo.packs * boxCount}</div>
+                    </div>
+                    <div>
+                        <div class="text-zinc-500 text-xs uppercase">Cards/Pack</div>
+                        <div class="text-xl font-bold text-white">${configInfo.cardsPerPack}</div>
+                    </div>
+                    <div>
+                        <div class="text-zinc-500 text-xs uppercase">Total Cards</div>
+                        <div class="text-xl font-bold text-emerald-400">${totalCardsMulti}</div>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="grid gap-2">
-            ${expected.map(e => {
-                const isGuaranteed = e.expected >= 1;
-                return `
-                    <div class="bg-zinc-900 rounded-lg px-4 py-3 flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <span class="text-zinc-200">${e.name}</span>
-                            <span class="text-xs text-zinc-500">${e.odds}</span>
-                        </div>
-                        <div class="text-right">
-                            <span class="font-mono font-bold ${isGuaranteed ? 'text-emerald-400' : 'text-amber-400'}">${isGuaranteed ? '~' + e.display : e.display + ' chance'}</span>
-                        </div>
+        
+        <!-- Two Column Layout -->
+        <div class="grid md:grid-cols-2 gap-6 mb-6">
+            <!-- Donut Chart -->
+            <div class="bg-zinc-900 rounded-lg p-5">
+                <h4 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Pull Distribution</h4>
+                <div id="donutChart" class="w-full" style="height: 250px;"></div>
+                <div class="grid grid-cols-4 gap-2 mt-4 text-center text-xs">
+                    <div>
+                        <div class="w-3 h-3 rounded-full bg-emerald-500 mx-auto mb-1"></div>
+                        <div class="text-zinc-400">Common</div>
+                        <div class="text-white font-semibold">${tiers.common.toFixed(1)}</div>
                     </div>
-                `;
-            }).join('')}
+                    <div>
+                        <div class="w-3 h-3 rounded-full bg-blue-500 mx-auto mb-1"></div>
+                        <div class="text-zinc-400">Uncommon</div>
+                        <div class="text-white font-semibold">${tiers.uncommon.toFixed(1)}</div>
+                    </div>
+                    <div>
+                        <div class="w-3 h-3 rounded-full bg-violet-500 mx-auto mb-1"></div>
+                        <div class="text-zinc-400">Rare</div>
+                        <div class="text-white font-semibold">${tiers.rare.toFixed(1)}</div>
+                    </div>
+                    <div>
+                        <div class="w-3 h-3 rounded-full bg-orange-500 mx-auto mb-1"></div>
+                        <div class="text-zinc-400">Chase</div>
+                        <div class="text-white font-semibold">${tiers.chase.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- What Are My Chances -->
+            <div class="bg-zinc-900 rounded-lg p-5">
+                <h4 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">🎯 Chase Card Odds</h4>
+                <p class="text-zinc-500 text-xs mb-4">Probability of pulling at least one in ${boxCount} box${boxCount > 1 ? 'es' : ''}</p>
+                <div class="space-y-3 max-h-[280px] overflow-y-auto pr-2">
+                    ${chaseCards.map(card => {
+                        // Probability of at least one hit: 1 - (1 - 1/odds)^cards
+                        const prob = 1 - Math.pow(1 - (1 / card.odds), totalCardsMulti);
+                        const probPercent = (prob * 100).toFixed(1);
+                        const barWidth = Math.min(100, prob * 100);
+                        const probColor = prob >= 0.5 ? 'text-emerald-400' : prob >= 0.1 ? 'text-amber-400' : 'text-red-400';
+                        const barColor = prob >= 0.5 ? 'bg-emerald-500' : prob >= 0.1 ? 'bg-amber-500' : 'bg-red-500';
+                        return `
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-zinc-300 text-sm">${card.name}</span>
+                                    <span class="font-mono text-sm ${probColor}">${probPercent}%</span>
+                                </div>
+                                <div class="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div class="${barColor} h-full rounded-full transition-all" style="width: ${barWidth}%"></div>
+                                </div>
+                                <div class="text-zinc-600 text-xs mt-0.5">${card.oddsDisplay}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
         </div>
-        <div class="mt-4 text-xs text-zinc-600">Note: These are statistical averages. Actual results will vary.</div>
+        
+        <!-- Expected Hits Table -->
+        <div class="bg-zinc-900 rounded-lg p-5">
+            <h4 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">Expected Hits in ${boxCount} Box${boxCount > 1 ? 'es' : ''}</h4>
+            <div class="grid gap-2 max-h-[300px] overflow-y-auto pr-2">
+                ${expected.filter(e => e.expected >= 0.01).map(e => {
+                    const isGuaranteed = e.expected >= 1;
+                    const barWidth = Math.min(100, (e.expected / Math.max(...expected.map(x => x.expected))) * 100);
+                    return `
+                        <div class="flex items-center gap-3">
+                            <div class="w-32 truncate text-zinc-300 text-sm">${e.name}</div>
+                            <div class="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                <div class="h-full ${getRarityBg(e.oddsDisplay)} rounded-full" style="width: ${barWidth}%"></div>
+                            </div>
+                            <div class="w-20 text-right">
+                                <span class="font-mono text-sm ${isGuaranteed ? 'text-emerald-400' : 'text-amber-400'}">
+                                    ${e.display}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+        
+        <div class="mt-4 text-xs text-zinc-600 text-center">
+            Note: These are statistical averages. Actual results will vary.
+        </div>
     `;
+}
+
+function renderDonutChart() {
+    const data = window.calculatorData;
+    if (!data) return;
+    
+    const container = document.getElementById('donutChart');
+    if (!container) return;
+    
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const radius = Math.min(width, height) / 2 - 10;
+    
+    container.innerHTML = '';
+    
+    const svg = d3.select('#donutChart')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .append('g')
+        .attr('transform', `translate(${width/2},${height/2})`);
+    
+    const colors = {
+        common: '#10b981',
+        uncommon: '#3b82f6',
+        rare: '#8b5cf6',
+        chase: '#f97316'
+    };
+    
+    const pieData = [
+        { name: 'Common', value: data.tiers.common, color: colors.common },
+        { name: 'Uncommon', value: data.tiers.uncommon, color: colors.uncommon },
+        { name: 'Rare', value: data.tiers.rare, color: colors.rare },
+        { name: 'Chase', value: data.tiers.chase, color: colors.chase }
+    ].filter(d => d.value > 0);
+    
+    const pie = d3.pie()
+        .value(d => d.value)
+        .sort(null);
+    
+    const arc = d3.arc()
+        .innerRadius(radius * 0.6)
+        .outerRadius(radius);
+    
+    const arcs = svg.selectAll('arc')
+        .data(pie(pieData))
+        .enter()
+        .append('g');
+    
+    arcs.append('path')
+        .attr('d', arc)
+        .attr('fill', d => d.data.color)
+        .attr('stroke', '#18181b')
+        .attr('stroke-width', 2)
+        .style('opacity', 0.85)
+        .on('mouseover', function() {
+            d3.select(this).style('opacity', 1).attr('transform', 'scale(1.05)');
+        })
+        .on('mouseout', function() {
+            d3.select(this).style('opacity', 0.85).attr('transform', 'scale(1)');
+        });
+    
+    // Center text
+    svg.append('text')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '-0.2em')
+        .attr('fill', 'white')
+        .attr('font-size', '24px')
+        .attr('font-weight', 'bold')
+        .text(data.totalCards);
+    
+    svg.append('text')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '1.2em')
+        .attr('fill', '#71717a')
+        .attr('font-size', '12px')
+        .text('total cards');
 }
 
 export function renderInsightsView() {
