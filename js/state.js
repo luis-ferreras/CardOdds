@@ -5,7 +5,8 @@ export const state = {
     product: null,
     config: 'hobby',
     view: 'compare',
-    compareTab: 'base'
+    compareTab: 'base',
+    boxCount: 1
 };
 
 // URL Management
