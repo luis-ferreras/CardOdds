@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Card Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
@@ -34,12 +35,14 @@
         <main>
             <div id="loadingState" class="flex flex-col items-center justify-center py-20">
                 <div class="text-4xl mb-4 loading-pulse">🎴</div>
-                <p class="text-zinc-500 text-sm">Loading Data</p>
+                <p class="text-zinc-500 text-sm">Loading data from Google Sheets...</p>
             </div>
 
             <div id="errorState" class="hidden flex flex-col items-center justify-center py-20">
                 <div class="text-4xl mb-4">⚠️</div>
                 <h2 class="text-xl font-semibold text-zinc-300 mb-2">Unable to Load Data</h2>
+                <p class="text-zinc-500 text-sm text-center max-w-md mb-4">Google Sheets can't be accessed from this preview due to browser restrictions.</p>
+                <p class="text-zinc-600 text-xs text-center max-w-md">This will work when hosted on GitHub Pages or your own domain.</p>
             </div>
 
             <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20">
