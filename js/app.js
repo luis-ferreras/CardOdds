@@ -67,10 +67,16 @@ function setCompareTab(tab) {
     renderProductContent();
 }
 
+function setBoxCount(count) {
+    state.boxCount = count;
+    renderProductContent();
+}
+
 // Make handlers available globally for onclick
 window.setConfig = setConfig;
 window.setView = setView;
 window.setCompareTab = setCompareTab;
+window.setBoxCount = setBoxCount;
 
 // URL loading helper
 function loadStateFromURL() {
