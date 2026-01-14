@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { PRODUCTS, ODDS_RAW, getAvailableConfigs, getOddsForProduct, getAllParallelsForProduct, getAllInsertsForProduct, getAllAutographsForProduct, formatOddsValue } from './data.js';
+import { PRODUCTS, ODDS_RAW, CHECKLIST, getAvailableConfigs, getOddsForProduct, getAllParallelsForProduct, getAllInsertsForProduct, getAllAutographsForProduct, formatOddsValue } from './data.js';
 import { parseOdds, formatOdds, getRarityColor, getRarityBg, getRarityTier } from './utils.js';
 import { findSleeperHit, findBestValueConfig, findChaseCards, calculateExpectedHits, groupByRarityTier } from './insights.js';
 
@@ -9,6 +9,7 @@ export function renderViewTabs() {
             <button onclick="setView('compare')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'compare' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">⚖️ Compare</button>
             <button onclick="setView('bubbles')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'bubbles' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">🫧 Bubbles</button>
             <button onclick="setView('calculator')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'calculator' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">🧮 Calculator</button>
+            <button onclick="setView('checklist')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'checklist' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">📋 Checklist</button>
             <button onclick="setView('insights')" class="px-3 py-1.5 rounded text-sm font-medium transition-all ${state.view === 'insights' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}">💡 Insights</button>
         </div>
     `;
@@ -665,6 +666,214 @@ export function renderInsightsView() {
     `;
 }
 
+export function renderChecklistView() {
+    // Filter checklist for current product
+    const productChecklist = CHECKLIST.filter(row => row.product_id === state.product);
+    
+    if (productChecklist.length === 0) {
+        return `
+            <div class="text-center py-12">
+                <div class="text-4xl mb-4">📋</div>
+                <p class="text-zinc-500">No checklist data available for this product.</p>
+                <p class="text-zinc-600 text-sm mt-2">Add data to the checklist tab in Google Sheets.</p>
+            </div>
+        `;
+    }
+    
+    // Calculate stats
+    const totalCards = productChecklist.length;
+    const rookies = productChecklist.filter(c => c.rookie === 'TRUE' || c.rookie === 'true' || c.rookie === '1' || c.rookie === 'Yes' || c.rookie === 'yes');
+    const rookieCount = rookies.length;
+    
+    // Get unique sets
+    const sets = [...new Set(productChecklist.map(c => c.set_name || c.set_type).filter(Boolean))];
+    const setCount = sets.length;
+    
+    // Count autos (set_type contains 'auto' or set_name contains 'auto')
+    const autos = productChecklist.filter(c => 
+        (c.set_type && c.set_type.toLowerCase().includes('auto')) ||
+        (c.set_name && c.set_name.toLowerCase().includes('auto'))
+    );
+    const autoCount = autos.length;
+    
+    // Get unique teams
+    const teams = [...new Set(productChecklist.map(c => c.team).filter(Boolean))].sort();
+    const teamCount = teams.length;
+    
+    // Team breakdown stats
+    const teamStats = teams.map(team => {
+        const teamCards = productChecklist.filter(c => c.team === team);
+        const teamRookies = teamCards.filter(c => c.rookie === 'TRUE' || c.rookie === 'true' || c.rookie === '1' || c.rookie === 'Yes' || c.rookie === 'yes');
+        const teamAutos = teamCards.filter(c => 
+            (c.set_type && c.set_type.toLowerCase().includes('auto')) ||
+            (c.set_name && c.set_name.toLowerCase().includes('auto'))
+        );
+        return {
+            team,
+            cards: teamCards.length,
+            rookies: teamRookies.length,
+            autos: teamAutos.length
+        };
+    }).sort((a, b) => b.cards - a.cards);
+    
+    const maxCards = Math.max(...teamStats.map(t => t.cards));
+    
+    // Get current filters from state
+    const setFilter = state.checklistSet || 'all';
+    const teamFilter = state.checklistTeam || 'all';
+    const rookieFilter = state.checklistRookieOnly || false;
+    const searchQuery = state.checklistSearch || '';
+    
+    // Filter checklist based on current filters
+    let filteredChecklist = [...productChecklist];
+    
+    if (setFilter !== 'all') {
+        filteredChecklist = filteredChecklist.filter(c => (c.set_name || c.set_type) === setFilter);
+    }
+    if (teamFilter !== 'all') {
+        filteredChecklist = filteredChecklist.filter(c => c.team === teamFilter);
+    }
+    if (rookieFilter) {
+        filteredChecklist = filteredChecklist.filter(c => c.rookie === 'TRUE' || c.rookie === 'true' || c.rookie === '1' || c.rookie === 'Yes' || c.rookie === 'yes');
+    }
+    if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        filteredChecklist = filteredChecklist.filter(c => 
+            (c.player && c.player.toLowerCase().includes(query)) ||
+            (c.team && c.team.toLowerCase().includes(query))
+        );
+    }
+    
+    return `
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-white mb-2">📋 Checklist</h3>
+            <p class="text-zinc-500 text-sm">Complete card checklist and team breakdown</p>
+        </div>
+        
+        <!-- Stats Overview -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+            <div class="bg-zinc-900 rounded-lg p-4 text-center">
+                <div class="text-3xl font-bold text-white">${totalCards}</div>
+                <div class="text-zinc-500 text-xs uppercase mt-1">Total Cards</div>
+            </div>
+            <div class="bg-zinc-900 rounded-lg p-4 text-center">
+                <div class="text-3xl font-bold text-orange-400">${rookieCount}</div>
+                <div class="text-zinc-500 text-xs uppercase mt-1">Rookies</div>
+            </div>
+            <div class="bg-zinc-900 rounded-lg p-4 text-center">
+                <div class="text-3xl font-bold text-violet-400">${setCount}</div>
+                <div class="text-zinc-500 text-xs uppercase mt-1">Sets</div>
+            </div>
+            <div class="bg-zinc-900 rounded-lg p-4 text-center">
+                <div class="text-3xl font-bold text-amber-400">${autoCount}</div>
+                <div class="text-zinc-500 text-xs uppercase mt-1">Autographs</div>
+            </div>
+            <div class="bg-zinc-900 rounded-lg p-4 text-center">
+                <div class="text-3xl font-bold text-emerald-400">${teamCount}</div>
+                <div class="text-zinc-500 text-xs uppercase mt-1">Teams</div>
+            </div>
+        </div>
+        
+        <!-- Team Breakdown -->
+        <div class="bg-zinc-900 rounded-lg p-5 mb-6">
+            <h4 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">🏀 Team Breakdown</h4>
+            <div class="max-h-[300px] overflow-y-auto pr-2">
+                <table class="w-full text-sm">
+                    <thead class="sticky top-0 bg-zinc-900">
+                        <tr class="border-b border-zinc-800">
+                            <th class="text-left py-2 text-zinc-400 font-medium">Team</th>
+                            <th class="text-center py-2 text-zinc-400 font-medium w-20">Cards</th>
+                            <th class="text-center py-2 text-zinc-400 font-medium w-20">Rookies</th>
+                            <th class="text-center py-2 text-zinc-400 font-medium w-20">Autos</th>
+                            <th class="text-left py-2 text-zinc-400 font-medium w-32"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${teamStats.map(t => `
+                            <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer" onclick="setChecklistTeam('${t.team}')">
+                                <td class="py-2 text-zinc-200">${t.team}</td>
+                                <td class="py-2 text-center text-white font-semibold">${t.cards}</td>
+                                <td class="py-2 text-center ${t.rookies > 0 ? 'text-orange-400' : 'text-zinc-600'}">${t.rookies || '-'}</td>
+                                <td class="py-2 text-center ${t.autos > 0 ? 'text-amber-400' : 'text-zinc-600'}">${t.autos || '-'}</td>
+                                <td class="py-2">
+                                    <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                        <div class="h-full bg-emerald-500 rounded-full" style="width: ${(t.cards / maxCards) * 100}%"></div>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Checklist Browser -->
+        <div class="bg-zinc-900 rounded-lg p-5">
+            <h4 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">📝 Browse Cards</h4>
+            
+            <!-- Filters -->
+            <div class="flex flex-wrap gap-3 mb-4">
+                <select onchange="setChecklistSet(this.value)" class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500">
+                    <option value="all" ${setFilter === 'all' ? 'selected' : ''}>All Sets</option>
+                    ${sets.map(s => `<option value="${s}" ${setFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+                
+                <select onchange="setChecklistTeam(this.value)" class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500">
+                    <option value="all" ${teamFilter === 'all' ? 'selected' : ''}>All Teams</option>
+                    ${teams.map(t => `<option value="${t}" ${teamFilter === t ? 'selected' : ''}>${t}</option>`).join('')}
+                </select>
+                
+                <label class="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer">
+                    <input type="checkbox" ${rookieFilter ? 'checked' : ''} onchange="setChecklistRookieOnly(this.checked)" class="rounded bg-zinc-800 border-zinc-700 text-emerald-500 focus:ring-emerald-500">
+                    Rookies Only
+                </label>
+                
+                <div class="flex-1 min-w-[200px]">
+                    <input type="text" placeholder="🔍 Search player..." value="${searchQuery}"
+                        oninput="setChecklistSearch(this.value)"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500">
+                </div>
+            </div>
+            
+            <!-- Results count -->
+            <div class="text-zinc-500 text-xs mb-3">
+                Showing ${filteredChecklist.length} of ${totalCards} cards
+            </div>
+            
+            <!-- Card List -->
+            <div class="max-h-[400px] overflow-y-auto pr-2">
+                ${filteredChecklist.length > 0 ? `
+                    <div class="space-y-1">
+                        ${filteredChecklist.slice(0, 100).map(card => {
+                            const isRookie = card.rookie === 'TRUE' || card.rookie === 'true' || card.rookie === '1' || card.rookie === 'Yes' || card.rookie === 'yes';
+                            const isAuto = (card.set_type && card.set_type.toLowerCase().includes('auto')) ||
+                                          (card.set_name && card.set_name.toLowerCase().includes('auto'));
+                            return `
+                                <div class="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-zinc-800/50 transition-colors">
+                                    <span class="text-zinc-600 text-xs w-8">#${card.card_num || '-'}</span>
+                                    <span class="flex-1 text-zinc-200">${card.player || 'Unknown'}</span>
+                                    <span class="text-zinc-500 text-sm w-24 truncate">${card.team || '-'}</span>
+                                    <div class="flex gap-1 w-16">
+                                        ${isRookie ? '<span class="text-xs bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">RC</span>' : ''}
+                                        ${isAuto ? '<span class="text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">Auto</span>' : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                        ${filteredChecklist.length > 100 ? `
+                            <div class="text-center text-zinc-500 text-sm py-4">
+                                Showing first 100 results. Use filters to narrow down.
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : `
+                    <div class="text-center text-zinc-500 py-8">No cards match your filters</div>
+                `}
+            </div>
+        </div>
+    `;
+}
+
 export function renderProductContent() {
     const product = PRODUCTS[state.product];
     if (!product) {
@@ -675,6 +884,7 @@ export function renderProductContent() {
     switch (state.view) {
         case 'bubbles': viewContent = renderBubblesView(); break;
         case 'calculator': viewContent = renderCalculatorView(); break;
+        case 'checklist': viewContent = renderChecklistView(); break;
         case 'insights': viewContent = renderInsightsView(); break;
         default: viewContent = renderCompareView();
     }
