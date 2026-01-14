@@ -6,7 +6,11 @@ export const state = {
     config: 'hobby',
     view: 'compare',
     compareTab: 'base',
-    boxCount: 1
+    boxCount: 1,
+    checklistSet: 'all',
+    checklistTeam: 'all',
+    checklistRookieOnly: false,
+    checklistSearch: ''
 };
 
 // URL Management
