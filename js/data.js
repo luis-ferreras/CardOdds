@@ -112,8 +112,13 @@ export function getAvailableConfigs(productId) {
 
 export function formatOddsValue(odds) {
     if (!odds) return null;
-    // Just return the value as-is - user enters the actual ratio like "1:4" or "2:1"
-    return String(odds).trim();
+    const str = String(odds).trim();
+    // Filter out spreadsheet errors
+    if (str.startsWith('#') || str === '' || str.toLowerCase() === 'null' || str.toLowerCase() === 'undefined') {
+        return null;
+    }
+    // Return the value as-is - user enters the actual ratio like "1:4" or "2:1"
+    return str;
 }
 
 export function getOddsForProduct(productId, config) {
