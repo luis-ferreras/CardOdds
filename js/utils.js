@@ -1,11 +1,28 @@
 // Odds parsing and formatting
+// Converts any odds format to a "1 in X" number for calculations
+// Examples: "1:4" → 4, "2:1" → 0.5, "1:50" → 50, "3:1" → 0.33
 export function parseOdds(oddsStr) {
     if (!oddsStr) return null;
-    const parts = oddsStr.split(':');
-    if (parts.length !== 2) return null;
-    const [num, denom] = parts.map(Number);
-    if (num > 1) return 1 / num;
-    return denom;
+    
+    // Handle string input
+    const str = String(oddsStr).trim();
+    
+    // If it contains a colon, parse as ratio
+    if (str.includes(':')) {
+        const parts = str.split(':');
+        if (parts.length !== 2) return null;
+        const [left, right] = parts.map(s => parseFloat(s.trim()));
+        if (isNaN(left) || isNaN(right) || right === 0) return null;
+        // "1:4" means 1 in 4, so return 4
+        // "2:1" means 2 in 1, so return 0.5 (1 in 0.5)
+        return right / left;
+    }
+    
+    // If it's just a number, assume it's "1:X"
+    const num = parseFloat(str);
+    if (!isNaN(num)) return num;
+    
+    return null;
 }
 
 export function formatOdds(oddsStr) {
