@@ -111,13 +111,9 @@ export function getAvailableConfigs(productId) {
 }
 
 export function formatOddsValue(odds) {
-    if (!isNaN(odds)) {
-        const num = parseFloat(odds);
-        if (num >= 1) return `1:${num}`;
-        if (num > 0) return `${Math.round(1/num)}:1`;
-    }
-    if (odds.includes(':')) return odds;
-    return `1:${odds}`;
+    if (!odds) return null;
+    // Just return the value as-is - user enters the actual ratio like "1:4" or "2:1"
+    return String(odds).trim();
 }
 
 export function getOddsForProduct(productId, config) {
