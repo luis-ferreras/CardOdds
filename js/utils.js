@@ -7,12 +7,17 @@ export function parseOdds(oddsStr) {
     // Handle string input
     const str = String(oddsStr).trim();
     
+    // Filter out spreadsheet errors (#DIV/0!, #N/A, #REF!, #VALUE!, etc.)
+    if (str.startsWith('#') || str === '' || str.toLowerCase() === 'null' || str.toLowerCase() === 'undefined') {
+        return null;
+    }
+    
     // If it contains a colon, parse as ratio
     if (str.includes(':')) {
         const parts = str.split(':');
         if (parts.length !== 2) return null;
         const [left, right] = parts.map(s => parseFloat(s.trim()));
-        if (isNaN(left) || isNaN(right) || right === 0) return null;
+        if (isNaN(left) || isNaN(right) || right === 0 || left === 0) return null;
         // "1:4" means 1 in 4, so return 4
         // "2:1" means 2 in 1, so return 0.5 (1 in 0.5)
         return right / left;
@@ -20,7 +25,7 @@ export function parseOdds(oddsStr) {
     
     // If it's just a number, assume it's "1:X"
     const num = parseFloat(str);
-    if (!isNaN(num)) return num;
+    if (!isNaN(num) && num > 0) return num;
     
     return null;
 }
